@@ -1,95 +1,3 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Agenda Movom</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background: #f3e9ff;
-    padding: 20px;
-}
-h1, h2 {
-    text-align: center;
-    color: #5a2d82;
-}
-.container {
-    max-width: 1200px;
-    margin: auto;
-    background: #fff;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 30px;
-}
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-th, td {
-    border: 1px solid #ddd;
-    padding: 6px;
-    text-align: center;
-}
-th {
-    background: #cdb4f5;
-}
-.vencida {
-    background: #ffd6d6;
-}
-input, select {
-    width: 100%;
-    padding: 5px;
-}
-button {
-    padding: 6px 10px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-}
-.btn-add { background: #4ecdc4; color: #fff; }
-.btn-del { background: #ef476f; color: #fff; }
-</style>
-</head>
-
-<body>
-
-<h1>Agenda de Avaliações – Movom</h1>
-
-<div class="container">
-<button class="btn-add" onclick="adicionar()">➕ Adicionar</button>
-
-<table>
-<thead>
-<tr>
-<th>Nome</th>
-<th>Tipo</th>
-<th>Data Avaliação</th>
-<th>Reavaliação</th>
-<th>Plano</th>
-<th>Ação</th>
-</tr>
-</thead>
-<tbody id="tabela"></tbody>
-</table>
-</div>
-
-<div class="container">
-<h2>⚠️ Reavaliações Vencidas</h2>
-<table>
-<thead>
-<tr>
-<th>Nome</th>
-<th>Última Avaliação</th>
-<th>Reavaliação</th>
-<th>Plano</th>
-</tr>
-</thead>
-<tbody id="vencidas"></tbody>
-</table>
-</div>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
@@ -112,33 +20,28 @@ const db = getFirestore(app);
 const tabela = document.getElementById("tabela");
 const vencidas = document.getElementById("vencidas");
 
+/* ===== REAVALIAÇÃO +3 MESES ===== */
 function calcReavaliacao(data) {
+    if (!data) return "";
     const d = new Date(data);
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
 }
 
-async function carregar() {
-    tabela.innerHTML = "";
-    vencidas.innerHTML = "";
+/* ===== CRIAR LINHA ===== */
+function criarLinha(id, d) {
+    const tr = document.createElement("tr");
 
-    const snap = await getDocs(collection(db, "alunos"));
-    const hoje = new Date();
-
-    snap.forEach(s => {
-        const d = s.data();
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-<td><input value="${d.nome}"></td>
+    tr.innerHTML = `
+<td><input value="${d.nome || ""}"></td>
 <td>
   <select>
     <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
     <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
   </select>
 </td>
-<td><input type="date" value="${d.dataAvaliacao}"></td>
-<td><input type="date" value="${d.dataReavaliacao}" readonly></td>
+<td><input type="date" value="${d.dataAvaliacao || ""}"></td>
+<td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
 <td>
   <select>
     <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
@@ -147,34 +50,51 @@ async function carregar() {
   </select>
 </td>
 <td><button class="btn-del">🗑️</button></td>
-        `;
+`;
 
-        const inputs = tr.querySelectorAll("input, select");
+    const inputs = tr.querySelectorAll("input, select");
 
-        inputs.forEach(() =>
-            tr.addEventListener("change", async () => {
-                const dados = {
-                    nome: inputs[0].value,
-                    tipo: inputs[1].value,
-                    dataAvaliacao: inputs[2].value,
-                    dataReavaliacao: calcReavaliacao(inputs[2].value),
-                    plano: inputs[4].value
-                };
-                await updateDoc(doc(db,"alunos",s.id), dados);
-                carregar();
-            })
-        );
-
-        tr.querySelector(".btn-del").onclick = async () => {
-            if(confirm("Apagar este registro?")){
-                await deleteDoc(doc(db,"alunos",s.id));
-                carregar();
-            }
+    /* ===== SALVAR APENAS A LINHA ===== */
+    tr.addEventListener("change", async () => {
+        const dados = {
+            nome: inputs[0].value,
+            tipo: inputs[1].value,
+            dataAvaliacao: inputs[2].value,
+            dataReavaliacao: calcReavaliacao(inputs[2].value),
+            plano: inputs[4].value
         };
+        inputs[3].value = dados.dataReavaliacao;
+        await updateDoc(doc(db, "alunos", id), dados);
+    });
 
-        tabela.appendChild(tr);
+    tr.querySelector(".btn-del").onclick = async () => {
+        if (confirm("Apagar este registro?")) {
+            await deleteDoc(doc(db, "alunos", id));
+            tr.remove();
+            atualizarVencidas();
+        }
+    };
 
-        if(new Date(d.dataReavaliacao) < hoje){
+    tabela.appendChild(tr);
+}
+
+/* ===== CARREGAR UMA ÚNICA VEZ ===== */
+async function carregar() {
+    tabela.innerHTML = "";
+    const snap = await getDocs(collection(db, "alunos"));
+    snap.forEach(s => criarLinha(s.id, s.data()));
+    atualizarVencidas();
+}
+
+/* ===== LISTA VENCIDAS ===== */
+async function atualizarVencidas() {
+    vencidas.innerHTML = "";
+    const hoje = new Date();
+    const snap = await getDocs(collection(db, "alunos"));
+
+    snap.forEach(s => {
+        const d = s.data();
+        if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
             vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
@@ -186,21 +106,24 @@ async function carregar() {
     });
 }
 
-async function adicionar(){
-    await addDoc(collection(db,"alunos"),{
-        nome:"",
-        tipo:"Avaliação",
-        dataAvaliacao:"",
-        dataReavaliacao:"",
-        plano:"Mensal"
+/* ===== ADICIONAR ===== */
+window.adicionar = async () => {
+    const ref = await addDoc(collection(db, "alunos"), {
+        nome: "",
+        tipo: "Avaliação",
+        dataAvaliacao: "",
+        dataReavaliacao: "",
+        plano: "Mensal"
     });
-    carregar();
-}
+    criarLinha(ref.id, {
+        nome: "",
+        tipo: "Avaliação",
+        dataAvaliacao: "",
+        dataReavaliacao: "",
+        plano: "Mensal"
+    });
+};
 
 carregar();
 </script>
-
-</body>
-</html>
-
 

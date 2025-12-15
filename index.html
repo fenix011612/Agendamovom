@@ -1,129 +1,214 @@
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {
-  getFirestore, collection, addDoc, getDocs,
-  updateDoc, deleteDoc, doc
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Agenda de Avaliações e Alunos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
-  authDomain: "agendamovom.firebaseapp.com",
-  projectId: "agendamovom",
-  storageBucket: "agendamovom.firebasestorage.app",
-  messagingSenderId: "919577291328",
-  appId: "1:919577291328:web:65f5937da45903598ccda5"
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f3e9ff;
+        margin: 0;
+        padding: 20px;
+    }
+
+    h1, h2 {
+        text-align: center;
+        color: #5a2d82;
+    }
+
+    .container {
+        max-width: 1100px;
+        margin: auto;
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+    }
+
+    th {
+        background: #cdb4f5;
+        color: #3a155f;
+    }
+
+    tr:nth-child(even) {
+        background: #f7f0ff;
+    }
+
+    .vencida {
+        background: #ffd6d6 !important;
+    }
+
+    input, select {
+        width: 100%;
+        padding: 6px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+
+    .btn {
+        margin-top: 15px;
+        padding: 10px 15px;
+        background: #4ecdc4;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .btn:hover {
+        background: #38b2a8;
+    }
+</style>
+</head>
+<body>
+
+<h1>Agenda de Avaliações e Alunos</h1>
+
+<div class="container">
+<table>
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Tipo</th>
+            <th>Data / Dia</th>
+            <th>Data Avaliação</th>
+            <th>Reavaliação (3 meses)</th>
+            <th>Plano</th>
+        </tr>
+    </thead>
+    <tbody id="tabela"></tbody>
+</table>
+
+<button class="btn" onclick="adicionarLinha()">➕ Adicionar Aluno</button>
+</div>
+
+<div class="container">
+<h2>⚠️ Reavaliações Vencidas</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Última Avaliação</th>
+            <th>Data da Reavaliação</th>
+            <th>Plano</th>
+        </tr>
+    </thead>
+    <tbody id="vencidas"></tbody>
+</table>
+</div>
+
+<script>
+const tabela = document.getElementById("tabela");
+const vencidas = document.getElementById("vencidas");
+
+/* ===== CARREGAR ===== */
+window.onload = () => {
+    const dados = JSON.parse(localStorage.getItem("agendaAlunos")) || [];
+    dados.forEach(d => adicionarLinha(d));
+    atualizarVencidas();
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+/* ===== SALVAR ===== */
+function salvarDados() {
+    const linhas = document.querySelectorAll("#tabela tr");
+    const dados = [];
 
-document.addEventListener("DOMContentLoaded", () => {
+    linhas.forEach(l => {
+        const i = l.querySelectorAll("input, select");
+        dados.push({
+            nome: i[0].value,
+            tipo: i[1].value,
+            dataSemana: i[2].value,
+            dataAvaliacao: i[3].value,
+            dataReavaliacao: i[4].value,
+            plano: i[5].value
+        });
+    });
 
-  const tabela = document.getElementById("tabela");
-  const vencidas = document.getElementById("vencidas");
+    localStorage.setItem("agendaAlunos", JSON.stringify(dados));
+    atualizarVencidas();
+}
 
-  function calcReavaliacao(data) {
-      if (!data) return "";
-      const d = new Date(data);
-      d.setMonth(d.getMonth() + 3);
-      return d.toISOString().split("T")[0];
-  }
+/* ===== REAVALIAÇÃO +3 MESES ===== */
+function calcularReavaliacao(av, reav) {
+    if (!av.value) return;
+    const d = new Date(av.value);
+    d.setMonth(d.getMonth() + 3);
+    reav.value = d.toISOString().split("T")[0];
+    salvarDados();
+}
 
-  function criarLinha(id, d) {
-      const tr = document.createElement("tr");
+/* ===== ADICIONAR LINHA ===== */
+function adicionarLinha(d = {}) {
+    const tr = document.createElement("tr");
 
-      tr.innerHTML = `
-<td><input value="${d.nome || ""}"></td>
-<td>
-  <select>
-    <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
-    <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
-  </select>
-</td>
-<td><input type="date" value="${d.dataAvaliacao || ""}"></td>
-<td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
-<td>
-  <select>
-    <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
-    <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
-    <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
-  </select>
-</td>
-<td><button class="btn-del">🗑️</button></td>
-`;
+    tr.innerHTML = `
+        <td><input value="${d.nome || ""}"></td>
+        <td>
+            <select>
+                <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
+                <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
+            </select>
+        </td>
+        <td><input value="${d.dataSemana || ""}"></td>
+        <td><input type="date" value="${d.dataAvaliacao || ""}"></td>
+        <td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
+        <td>
+            <select>
+                <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
+                <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
+                <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
+            </select>
+        </td>
+    `;
 
-      const inputs = tr.querySelectorAll("input, select");
+    const i = tr.querySelectorAll("input, select");
+    i.forEach(el => el.addEventListener("change", salvarDados));
+    i[3].addEventListener("change", () => calcularReavaliacao(i[3], i[4]));
 
-      tr.addEventListener("change", async () => {
-          const dados = {
-              nome: inputs[0].value,
-              tipo: inputs[1].value,
-              dataAvaliacao: inputs[2].value,
-              dataReavaliacao: calcReavaliacao(inputs[2].value),
-              plano: inputs[4].value
-          };
-          inputs[3].value = dados.dataReavaliacao;
-          await updateDoc(doc(db, "alunos", id), dados);
-          atualizarVencidas();
-      });
+    tabela.appendChild(tr);
+    salvarDados();
+}
 
-      tr.querySelector(".btn-del").onclick = async () => {
-          if (confirm("Apagar este registro?")) {
-              await deleteDoc(doc(db, "alunos", id));
-              tr.remove();
-              atualizarVencidas();
-          }
-      };
+/* ===== LISTA DE VENCIDAS ===== */
+function atualizarVencidas() {
+    vencidas.innerHTML = "";
+    const hoje = new Date();
 
-      tabela.appendChild(tr);
-  }
-
-  async function carregar() {
-      tabela.innerHTML = "";
-      const snap = await getDocs(collection(db, "alunos"));
-      snap.forEach(s => criarLinha(s.id, s.data()));
-      atualizarVencidas();
-  }
-
-  async function atualizarVencidas() {
-      vencidas.innerHTML = "";
-      const hoje = new Date();
-      const snap = await getDocs(collection(db, "alunos"));
-
-      snap.forEach(s => {
-          const d = s.data();
-          if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
-              vencidas.innerHTML += `
-<tr class="vencida">
-<td>${d.nome}</td>
-<td>${d.dataAvaliacao}</td>
-<td>${d.dataReavaliacao}</td>
-<td>${d.plano}</td>
-</tr>`;
-          }
-      });
-  }
-
-  // 👇 EXPÕE A FUNÇÃO PARA O BOTÃO
-  window.adicionar = async () => {
-      const ref = await addDoc(collection(db, "alunos"), {
-          nome: "",
-          tipo: "Avaliação",
-          dataAvaliacao: "",
-          dataReavaliacao: "",
-          plano: "Mensal"
-      });
-
-      criarLinha(ref.id, {
-          nome: "",
-          tipo: "Avaliação",
-          dataAvaliacao: "",
-          dataReavaliacao: "",
-          plano: "Mensal"
-      });
-  };
-
-  carregar();
-});
+    const dados = JSON.parse(localStorage.getItem("agendaAlunos")) || [];
+    dados.forEach(d => {
+        if (d.dataReavaliacao) {
+            const reav = new Date(d.dataReavaliacao);
+            if (reav < hoje) {
+                vencidas.innerHTML += `
+                    <tr class="vencida">
+                        <td>${d.nome}</td>
+                        <td>${d.dataAvaliacao}</td>
+                        <td>${d.dataReavaliacao}</td>
+                        <td>${d.plano}</td>
+                    </tr>
+                `;
+            }
+        }
+    });
+}
 </script>
 
+</body>
+</html>

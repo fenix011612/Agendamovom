@@ -29,7 +29,7 @@ table {
 }
 th, td {
     border: 1px solid #ddd;
-    padding: 8px;
+    padding: 6px;
     text-align: center;
 }
 th {
@@ -38,15 +38,17 @@ th {
 .vencida {
     background: #ffd6d6;
 }
+input, select {
+    width: 100%;
+    padding: 5px;
+}
 button {
     padding: 6px 10px;
-    margin: 2px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
 }
 .btn-add { background: #4ecdc4; color: #fff; }
-.btn-edit { background: #ffd166; }
 .btn-del { background: #ef476f; color: #fff; }
 </style>
 </head>
@@ -56,7 +58,7 @@ button {
 <h1>Agenda de Avaliações – Movom</h1>
 
 <div class="container">
-<button class="btn-add" onclick="novoAluno()">➕ Novo Aluno</button>
+<button class="btn-add" onclick="adicionar()">➕ Adicionar</button>
 
 <table>
 <thead>
@@ -66,7 +68,7 @@ button {
 <th>Data Avaliação</th>
 <th>Reavaliação</th>
 <th>Plano</th>
-<th>Ações</th>
+<th>Ação</th>
 </tr>
 </thead>
 <tbody id="tabela"></tbody>
@@ -88,12 +90,11 @@ button {
 </table>
 </div>
 
-<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, getDocs,
-  deleteDoc, doc, updateDoc
+  updateDoc, deleteDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -111,14 +112,12 @@ const db = getFirestore(app);
 const tabela = document.getElementById("tabela");
 const vencidas = document.getElementById("vencidas");
 
-/* ===== REAVALIAÇÃO +3 MESES ===== */
-function reavaliacao3Meses(data) {
+function calcReavaliacao(data) {
     const d = new Date(data);
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
 }
 
-/* ===== CARREGAR ===== */
 async function carregar() {
     tabela.innerHTML = "";
     vencidas.innerHTML = "";
@@ -126,81 +125,82 @@ async function carregar() {
     const snap = await getDocs(collection(db, "alunos"));
     const hoje = new Date();
 
-    snap.forEach(docSnap => {
-        const d = docSnap.data();
+    snap.forEach(s => {
+        const d = s.data();
 
-        tabela.innerHTML += `
-        <tr>
-            <td>${d.nome}</td>
-            <td>${d.tipo}</td>
-            <td>${d.dataAvaliacao}</td>
-            <td>${d.dataReavaliacao}</td>
-            <td>${d.plano}</td>
-            <td>
-                <button class="btn-edit" onclick="editar('${docSnap.id}')">✏️</button>
-                <button class="btn-del" onclick="apagar('${docSnap.id}')">🗑️</button>
-            </td>
-        </tr>`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+<td><input value="${d.nome}"></td>
+<td>
+  <select>
+    <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
+    <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
+  </select>
+</td>
+<td><input type="date" value="${d.dataAvaliacao}"></td>
+<td><input type="date" value="${d.dataReavaliacao}" readonly></td>
+<td>
+  <select>
+    <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
+    <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
+    <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
+  </select>
+</td>
+<td><button class="btn-del">🗑️</button></td>
+        `;
 
-        if (new Date(d.dataReavaliacao) < hoje) {
+        const inputs = tr.querySelectorAll("input, select");
+
+        inputs.forEach(() =>
+            tr.addEventListener("change", async () => {
+                const dados = {
+                    nome: inputs[0].value,
+                    tipo: inputs[1].value,
+                    dataAvaliacao: inputs[2].value,
+                    dataReavaliacao: calcReavaliacao(inputs[2].value),
+                    plano: inputs[4].value
+                };
+                await updateDoc(doc(db,"alunos",s.id), dados);
+                carregar();
+            })
+        );
+
+        tr.querySelector(".btn-del").onclick = async () => {
+            if(confirm("Apagar este registro?")){
+                await deleteDoc(doc(db,"alunos",s.id));
+                carregar();
+            }
+        };
+
+        tabela.appendChild(tr);
+
+        if(new Date(d.dataReavaliacao) < hoje){
             vencidas.innerHTML += `
-            <tr class="vencida">
-                <td>${d.nome}</td>
-                <td>${d.dataAvaliacao}</td>
-                <td>${d.dataReavaliacao}</td>
-                <td>${d.plano}</td>
-            </tr>`;
+<tr class="vencida">
+<td>${d.nome}</td>
+<td>${d.dataAvaliacao}</td>
+<td>${d.dataReavaliacao}</td>
+<td>${d.plano}</td>
+</tr>`;
         }
     });
 }
 
-/* ===== NOVO ===== */
-window.novoAluno = async () => {
-    const nome = prompt("Nome do aluno:");
-    if (!nome) return;
-
-    const data = prompt("Data da avaliação (YYYY-MM-DD):");
-    const plano = prompt("Plano (Gympass / Totalpass / Mensal):", "Mensal");
-
-    await addDoc(collection(db, "alunos"), {
-        nome,
-        tipo: "Avaliação",
-        dataAvaliacao: data,
-        dataReavaliacao: reavaliacao3Meses(data),
-        plano
+async function adicionar(){
+    await addDoc(collection(db,"alunos"),{
+        nome:"",
+        tipo:"Avaliação",
+        dataAvaliacao:"",
+        dataReavaliacao:"",
+        plano:"Mensal"
     });
-
     carregar();
-};
-
-/* ===== EDITAR ===== */
-window.editar = async (id) => {
-    const ref = doc(db, "alunos", id);
-
-    const nome = prompt("Novo nome:");
-    const data = prompt("Nova data da avaliação (YYYY-MM-DD):");
-    const plano = prompt("Plano:");
-
-    await updateDoc(ref, {
-        nome,
-        dataAvaliacao: data,
-        dataReavaliacao: reavaliacao3Meses(data),
-        plano
-    });
-
-    carregar();
-};
-
-/* ===== APAGAR ===== */
-window.apagar = async (id) => {
-    if (confirm("Deseja apagar este registro?")) {
-        await deleteDoc(doc(db, "alunos", id));
-        carregar();
-    }
-};
+}
 
 carregar();
 </script>
 
 </body>
 </html>
+
+

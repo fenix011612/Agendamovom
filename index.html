@@ -16,7 +16,7 @@ h1, h2 {
     color: #5a2d82;
 }
 .container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: auto;
     background: #fff;
     padding: 20px;
@@ -38,19 +38,16 @@ th {
 .vencida {
     background: #ffd6d6;
 }
-input, select {
-    width: 100%;
-    padding: 6px;
-}
 button {
-    margin-top: 10px;
-    padding: 10px;
-    background: #4ecdc4;
-    color: #fff;
+    padding: 6px 10px;
+    margin: 2px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
 }
+.btn-add { background: #4ecdc4; color: #fff; }
+.btn-edit { background: #ffd166; }
+.btn-del { background: #ef476f; color: #fff; }
 </style>
 </head>
 
@@ -59,21 +56,21 @@ button {
 <h1>Agenda de Avaliações – Movom</h1>
 
 <div class="container">
+<button class="btn-add" onclick="novoAluno()">➕ Novo Aluno</button>
+
 <table>
 <thead>
 <tr>
-    <th>Nome</th>
-    <th>Tipo</th>
-    <th>Data / Dia</th>
-    <th>Data Avaliação</th>
-    <th>Reavaliação</th>
-    <th>Plano</th>
+<th>Nome</th>
+<th>Tipo</th>
+<th>Data Avaliação</th>
+<th>Reavaliação</th>
+<th>Plano</th>
+<th>Ações</th>
 </tr>
 </thead>
 <tbody id="tabela"></tbody>
 </table>
-
-<button onclick="adicionarLinha()">➕ Adicionar Aluno</button>
 </div>
 
 <div class="container">
@@ -81,10 +78,10 @@ button {
 <table>
 <thead>
 <tr>
-    <th>Nome</th>
-    <th>Última Avaliação</th>
-    <th>Reavaliação</th>
-    <th>Plano</th>
+<th>Nome</th>
+<th>Última Avaliação</th>
+<th>Reavaliação</th>
+<th>Plano</th>
 </tr>
 </thead>
 <tbody id="vencidas"></tbody>
@@ -95,7 +92,8 @@ button {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs, deleteDoc, doc
+  getFirestore, collection, addDoc, getDocs,
+  deleteDoc, doc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -113,69 +111,95 @@ const db = getFirestore(app);
 const tabela = document.getElementById("tabela");
 const vencidas = document.getElementById("vencidas");
 
-/* ====== CALCULAR +3 MESES ====== */
-function calcularReavaliacao(data) {
+/* ===== REAVALIAÇÃO +3 MESES ===== */
+function reavaliacao3Meses(data) {
     const d = new Date(data);
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
 }
 
-/* ====== CARREGAR ====== */
-async function carregarDados() {
+/* ===== CARREGAR ===== */
+async function carregar() {
     tabela.innerHTML = "";
     vencidas.innerHTML = "";
 
-    const querySnapshot = await getDocs(collection(db, "alunos"));
+    const snap = await getDocs(collection(db, "alunos"));
     const hoje = new Date();
 
-    querySnapshot.forEach((docSnap) => {
+    snap.forEach(docSnap => {
         const d = docSnap.data();
 
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+        tabela.innerHTML += `
+        <tr>
             <td>${d.nome}</td>
             <td>${d.tipo}</td>
-            <td>${d.dataSemana}</td>
             <td>${d.dataAvaliacao}</td>
             <td>${d.dataReavaliacao}</td>
             <td>${d.plano}</td>
-        `;
-        tabela.appendChild(tr);
+            <td>
+                <button class="btn-edit" onclick="editar('${docSnap.id}')">✏️</button>
+                <button class="btn-del" onclick="apagar('${docSnap.id}')">🗑️</button>
+            </td>
+        </tr>`;
 
         if (new Date(d.dataReavaliacao) < hoje) {
             vencidas.innerHTML += `
-                <tr class="vencida">
-                    <td>${d.nome}</td>
-                    <td>${d.dataAvaliacao}</td>
-                    <td>${d.dataReavaliacao}</td>
-                    <td>${d.plano}</td>
-                </tr>
-            `;
+            <tr class="vencida">
+                <td>${d.nome}</td>
+                <td>${d.dataAvaliacao}</td>
+                <td>${d.dataReavaliacao}</td>
+                <td>${d.plano}</td>
+            </tr>`;
         }
     });
 }
 
-/* ====== ADICIONAR ====== */
-window.adicionarLinha = async () => {
+/* ===== NOVO ===== */
+window.novoAluno = async () => {
     const nome = prompt("Nome do aluno:");
     if (!nome) return;
 
-    const dataAvaliacao = prompt("Data da avaliação (YYYY-MM-DD):");
-    const dataReavaliacao = calcularReavaliacao(dataAvaliacao);
+    const data = prompt("Data da avaliação (YYYY-MM-DD):");
+    const plano = prompt("Plano (Gympass / Totalpass / Mensal):", "Mensal");
 
     await addDoc(collection(db, "alunos"), {
         nome,
         tipo: "Avaliação",
-        dataSemana: "",
-        dataAvaliacao,
-        dataReavaliacao,
-        plano: "Mensal"
+        dataAvaliacao: data,
+        dataReavaliacao: reavaliacao3Meses(data),
+        plano
     });
 
-    carregarDados();
+    carregar();
 };
 
-carregarDados();
+/* ===== EDITAR ===== */
+window.editar = async (id) => {
+    const ref = doc(db, "alunos", id);
+
+    const nome = prompt("Novo nome:");
+    const data = prompt("Nova data da avaliação (YYYY-MM-DD):");
+    const plano = prompt("Plano:");
+
+    await updateDoc(ref, {
+        nome,
+        dataAvaliacao: data,
+        dataReavaliacao: reavaliacao3Meses(data),
+        plano
+    });
+
+    carregar();
+};
+
+/* ===== APAGAR ===== */
+window.apagar = async (id) => {
+    if (confirm("Deseja apagar este registro?")) {
+        await deleteDoc(doc(db, "alunos", id));
+        carregar();
+    }
+};
+
+carregar();
 </script>
 
 </body>

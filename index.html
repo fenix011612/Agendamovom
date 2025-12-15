@@ -6,208 +6,203 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f3e9ff;
-        margin: 0;
-        padding: 20px;
-    }
-
-    h1, h2 {
-        text-align: center;
-        color: #5a2d82;
-    }
-
-    .container {
-        max-width: 1100px;
-        margin: auto;
-        background: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        margin-bottom: 30px;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 15px;
-    }
-
-    th, td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: center;
-    }
-
-    th {
-        background: #cdb4f5;
-        color: #3a155f;
-    }
-
-    tr:nth-child(even) {
-        background: #f7f0ff;
-    }
-
-    .vencida {
-        background: #ffd6d6 !important;
-    }
-
-    input, select {
-        width: 100%;
-        padding: 6px;
-        border-radius: 6px;
-        border: 1px solid #ccc;
-    }
-
-    .btn {
-        margin-top: 15px;
-        padding: 10px 15px;
-        background: #4ecdc4;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-    }
-
-    .btn:hover {
-        background: #38b2a8;
-    }
+body {
+    font-family: Arial, sans-serif;
+    background: #f3e9ff;
+    padding: 20px;
+}
+h1, h2 {
+    text-align: center;
+    color: #5a2d82;
+}
+.container {
+    max-width: 1100px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+}
+th {
+    background: #cdb4f5;
+}
+.vencida {
+    background: #ffd6d6;
+}
+input, select {
+    width: 100%;
+    padding: 6px;
+}
+button {
+    padding: 10px;
+    background: #4ecdc4;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
 </style>
 </head>
+
 <body>
 
 <h1>Agenda de Avaliações e Alunos</h1>
 
 <div class="container">
 <table>
-    <thead>
-        <tr>
-            <th>Nome</th>
-            <th>Tipo</th>
-            <th>Data / Dia</th>
-            <th>Data Avaliação</th>
-            <th>Reavaliação (3 meses)</th>
-            <th>Plano</th>
-        </tr>
-    </thead>
-    <tbody id="tabela"></tbody>
+<thead>
+<tr>
+<th>Nome</th>
+<th>Tipo</th>
+<th>Data / Dia</th>
+<th>Data Avaliação</th>
+<th>Reavaliação</th>
+<th>Plano</th>
+<th>Ação</th>
+</tr>
+</thead>
+<tbody id="tabela"></tbody>
 </table>
 
-<button class="btn" onclick="adicionarLinha()">➕ Adicionar Aluno</button>
+<button onclick="adicionarLinha()">➕ Adicionar Aluno</button>
 </div>
 
 <div class="container">
 <h2>⚠️ Reavaliações Vencidas</h2>
-
 <table>
-    <thead>
-        <tr>
-            <th>Nome</th>
-            <th>Última Avaliação</th>
-            <th>Data da Reavaliação</th>
-            <th>Plano</th>
-        </tr>
-    </thead>
-    <tbody id="vencidas"></tbody>
+<thead>
+<tr>
+<th>Nome</th>
+<th>Última Avaliação</th>
+<th>Reavaliação</th>
+<th>Plano</th>
+</tr>
+</thead>
+<tbody id="vencidas"></tbody>
 </table>
 </div>
 
-<script>
-const tabela = document.getElementById("tabela");
-const vencidas = document.getElementById("vencidas");
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getDatabase, ref, push, set, onValue, update, remove
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-/* ===== CARREGAR ===== */
-window.onload = () => {
-    const dados = JSON.parse(localStorage.getItem("agendaAlunos")) || [];
-    dados.forEach(d => adicionarLinha(d));
-    atualizarVencidas();
+const firebaseConfig = {
+  apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
+  authDomain: "agendamovom.firebaseapp.com",
+  projectId: "agendamovom",
+  storageBucket: "agendamovom.firebasestorage.app",
+  messagingSenderId: "919577291328",
+  appId: "1:919577291328:web:65f5937da45903598ccda5"
 };
 
-/* ===== SALVAR ===== */
-function salvarDados() {
-    const linhas = document.querySelectorAll("#tabela tr");
-    const dados = [];
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-    linhas.forEach(l => {
-        const i = l.querySelectorAll("input, select");
-        dados.push({
-            nome: i[0].value,
-            tipo: i[1].value,
-            dataSemana: i[2].value,
-            dataAvaliacao: i[3].value,
-            dataReavaliacao: i[4].value,
-            plano: i[5].value
-        });
-    });
-
-    localStorage.setItem("agendaAlunos", JSON.stringify(dados));
-    atualizarVencidas();
-}
+const tabela = document.getElementById("tabela");
+const vencidas = document.getElementById("vencidas");
+const alunosRef = ref(db, "alunos");
 
 /* ===== REAVALIAÇÃO +3 MESES ===== */
-function calcularReavaliacao(av, reav) {
-    if (!av.value) return;
-    const d = new Date(av.value);
+function calcReavaliacao(data) {
+    if (!data) return "";
+    const d = new Date(data);
     d.setMonth(d.getMonth() + 3);
-    reav.value = d.toISOString().split("T")[0];
-    salvarDados();
+    return d.toISOString().split("T")[0];
 }
 
-/* ===== ADICIONAR LINHA ===== */
-function adicionarLinha(d = {}) {
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-        <td><input value="${d.nome || ""}"></td>
-        <td>
-            <select>
-                <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
-                <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
-            </select>
-        </td>
-        <td><input value="${d.dataSemana || ""}"></td>
-        <td><input type="date" value="${d.dataAvaliacao || ""}"></td>
-        <td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
-        <td>
-            <select>
-                <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
-                <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
-                <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
-            </select>
-        </td>
-    `;
-
-    const i = tr.querySelectorAll("input, select");
-    i.forEach(el => el.addEventListener("change", salvarDados));
-    i[3].addEventListener("change", () => calcularReavaliacao(i[3], i[4]));
-
-    tabela.appendChild(tr);
-    salvarDados();
-}
-
-/* ===== LISTA DE VENCIDAS ===== */
-function atualizarVencidas() {
+/* ===== RENDER ===== */
+function render(snapshot) {
+    tabela.innerHTML = "";
     vencidas.innerHTML = "";
-    const hoje = new Date();
 
-    const dados = JSON.parse(localStorage.getItem("agendaAlunos")) || [];
-    dados.forEach(d => {
-        if (d.dataReavaliacao) {
-            const reav = new Date(d.dataReavaliacao);
-            if (reav < hoje) {
-                vencidas.innerHTML += `
-                    <tr class="vencida">
-                        <td>${d.nome}</td>
-                        <td>${d.dataAvaliacao}</td>
-                        <td>${d.dataReavaliacao}</td>
-                        <td>${d.plano}</td>
-                    </tr>
-                `;
+    const hoje = new Date();
+    const dados = snapshot.val() || {};
+
+    Object.entries(dados).forEach(([id, d]) => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+<td><input value="${d.nome || ""}"></td>
+<td>
+<select>
+<option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
+<option ${d.tipo==="Aula"?"selected":""}>Aula</option>
+</select>
+</td>
+<td><input value="${d.dataSemana || ""}"></td>
+<td><input type="date" value="${d.dataAvaliacao || ""}"></td>
+<td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
+<td>
+<select>
+<option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
+<option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
+<option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
+</select>
+</td>
+<td><button>🗑️</button></td>
+`;
+
+        const i = tr.querySelectorAll("input, select");
+
+        tr.addEventListener("change", () => {
+            const dadosAtualizados = {
+                nome: i[0].value,
+                tipo: i[1].value,
+                dataSemana: i[2].value,
+                dataAvaliacao: i[3].value,
+                dataReavaliacao: calcReavaliacao(i[3].value),
+                plano: i[5].value
+            };
+            i[4].value = dadosAtualizados.dataReavaliacao;
+            update(ref(db, `alunos/${id}`), dadosAtualizados);
+        });
+
+        tr.querySelector("button").onclick = () => {
+            if (confirm("Apagar este aluno?")) {
+                remove(ref(db, `alunos/${id}`));
             }
+        };
+
+        tabela.appendChild(tr);
+
+        if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
+            vencidas.innerHTML += `
+<tr class="vencida">
+<td>${d.nome}</td>
+<td>${d.dataAvaliacao}</td>
+<td>${d.dataReavaliacao}</td>
+<td>${d.plano}</td>
+</tr>`;
         }
     });
 }
+
+/* ===== TEMPO REAL ===== */
+onValue(alunosRef, render);
+
+/* ===== ADICIONAR ===== */
+window.adicionarLinha = () => {
+    const novo = push(alunosRef);
+    set(novo, {
+        nome: "",
+        tipo: "Avaliação",
+        dataSemana: "",
+        dataAvaliacao: "",
+        dataReavaliacao: "",
+        plano: "Mensal"
+    });
+};
 </script>
 
 </body>

@@ -17,22 +17,22 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const tabela = document.getElementById("tabela");
-const vencidas = document.getElementById("vencidas");
+document.addEventListener("DOMContentLoaded", () => {
 
-/* ===== REAVALIAÇÃO +3 MESES ===== */
-function calcReavaliacao(data) {
-    if (!data) return "";
-    const d = new Date(data);
-    d.setMonth(d.getMonth() + 3);
-    return d.toISOString().split("T")[0];
-}
+  const tabela = document.getElementById("tabela");
+  const vencidas = document.getElementById("vencidas");
 
-/* ===== CRIAR LINHA ===== */
-function criarLinha(id, d) {
-    const tr = document.createElement("tr");
+  function calcReavaliacao(data) {
+      if (!data) return "";
+      const d = new Date(data);
+      d.setMonth(d.getMonth() + 3);
+      return d.toISOString().split("T")[0];
+  }
 
-    tr.innerHTML = `
+  function criarLinha(id, d) {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
   <select>
@@ -52,78 +52,78 @@ function criarLinha(id, d) {
 <td><button class="btn-del">🗑️</button></td>
 `;
 
-    const inputs = tr.querySelectorAll("input, select");
+      const inputs = tr.querySelectorAll("input, select");
 
-    /* ===== SALVAR APENAS A LINHA ===== */
-    tr.addEventListener("change", async () => {
-        const dados = {
-            nome: inputs[0].value,
-            tipo: inputs[1].value,
-            dataAvaliacao: inputs[2].value,
-            dataReavaliacao: calcReavaliacao(inputs[2].value),
-            plano: inputs[4].value
-        };
-        inputs[3].value = dados.dataReavaliacao;
-        await updateDoc(doc(db, "alunos", id), dados);
-    });
+      tr.addEventListener("change", async () => {
+          const dados = {
+              nome: inputs[0].value,
+              tipo: inputs[1].value,
+              dataAvaliacao: inputs[2].value,
+              dataReavaliacao: calcReavaliacao(inputs[2].value),
+              plano: inputs[4].value
+          };
+          inputs[3].value = dados.dataReavaliacao;
+          await updateDoc(doc(db, "alunos", id), dados);
+          atualizarVencidas();
+      });
 
-    tr.querySelector(".btn-del").onclick = async () => {
-        if (confirm("Apagar este registro?")) {
-            await deleteDoc(doc(db, "alunos", id));
-            tr.remove();
-            atualizarVencidas();
-        }
-    };
+      tr.querySelector(".btn-del").onclick = async () => {
+          if (confirm("Apagar este registro?")) {
+              await deleteDoc(doc(db, "alunos", id));
+              tr.remove();
+              atualizarVencidas();
+          }
+      };
 
-    tabela.appendChild(tr);
-}
+      tabela.appendChild(tr);
+  }
 
-/* ===== CARREGAR UMA ÚNICA VEZ ===== */
-async function carregar() {
-    tabela.innerHTML = "";
-    const snap = await getDocs(collection(db, "alunos"));
-    snap.forEach(s => criarLinha(s.id, s.data()));
-    atualizarVencidas();
-}
+  async function carregar() {
+      tabela.innerHTML = "";
+      const snap = await getDocs(collection(db, "alunos"));
+      snap.forEach(s => criarLinha(s.id, s.data()));
+      atualizarVencidas();
+  }
 
-/* ===== LISTA VENCIDAS ===== */
-async function atualizarVencidas() {
-    vencidas.innerHTML = "";
-    const hoje = new Date();
-    const snap = await getDocs(collection(db, "alunos"));
+  async function atualizarVencidas() {
+      vencidas.innerHTML = "";
+      const hoje = new Date();
+      const snap = await getDocs(collection(db, "alunos"));
 
-    snap.forEach(s => {
-        const d = s.data();
-        if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
-            vencidas.innerHTML += `
+      snap.forEach(s => {
+          const d = s.data();
+          if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
+              vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
 <td>${d.dataAvaliacao}</td>
 <td>${d.dataReavaliacao}</td>
 <td>${d.plano}</td>
 </tr>`;
-        }
-    });
-}
+          }
+      });
+  }
 
-/* ===== ADICIONAR ===== */
-window.adicionar = async () => {
-    const ref = await addDoc(collection(db, "alunos"), {
-        nome: "",
-        tipo: "Avaliação",
-        dataAvaliacao: "",
-        dataReavaliacao: "",
-        plano: "Mensal"
-    });
-    criarLinha(ref.id, {
-        nome: "",
-        tipo: "Avaliação",
-        dataAvaliacao: "",
-        dataReavaliacao: "",
-        plano: "Mensal"
-    });
-};
+  // 👇 EXPÕE A FUNÇÃO PARA O BOTÃO
+  window.adicionar = async () => {
+      const ref = await addDoc(collection(db, "alunos"), {
+          nome: "",
+          tipo: "Avaliação",
+          dataAvaliacao: "",
+          dataReavaliacao: "",
+          plano: "Mensal"
+      });
 
-carregar();
+      criarLinha(ref.id, {
+          nome: "",
+          tipo: "Avaliação",
+          dataAvaliacao: "",
+          dataReavaliacao: "",
+          plano: "Mensal"
+      });
+  };
+
+  carregar();
+});
 </script>
 

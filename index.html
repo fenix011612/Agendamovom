@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Agenda de Avaliações e Alunos</title>
+<title>Agenda Movom</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -38,6 +38,12 @@ th {
 .vencida {
     background: #ffd6d6;
 }
+.atendido {
+    background: #d4f8e8;
+}
+.nao-atendido {
+    background: #ffe2e2;
+}
 input, select {
     width: 100%;
     padding: 6px;
@@ -55,27 +61,28 @@ button {
 
 <body>
 
-<h1>Agenda de Avaliações e Alunos</h1>
+<h1>Agenda de Avaliações e Atendimentos</h1>
 
+<!-- ===== ALUNOS ===== -->
 <div class="container">
+<h2>👤 Alunos</h2>
 <table>
 <thead>
 <tr>
 <th>Nome</th>
 <th>Tipo</th>
-<th>Data / Dia</th>
 <th>Data Avaliação</th>
 <th>Reavaliação</th>
 <th>Plano</th>
 <th>Ação</th>
 </tr>
 </thead>
-<tbody id="tabela"></tbody>
+<tbody id="tabelaAlunos"></tbody>
 </table>
-
-<button onclick="adicionarLinha()">➕ Adicionar Aluno</button>
+<button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
+<!-- ===== REAVALIAÇÕES ===== -->
 <div class="container">
 <h2>⚠️ Reavaliações Vencidas</h2>
 <table>
@@ -91,12 +98,32 @@ button {
 </table>
 </div>
 
+<!-- ===== AGENDA ===== -->
+<div class="container">
+<h2>📅 Agenda de Atendimentos</h2>
+<table>
+<thead>
+<tr>
+<th>Aluno</th>
+<th>Modalidade</th>
+<th>Data</th>
+<th>Horário</th>
+<th>Status</th>
+<th>Ação</th>
+</tr>
+</thead>
+<tbody id="agenda"></tbody>
+</table>
+<button onclick="adicionarHorario()">➕ Novo Horário</button>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getDatabase, ref, push, set, onValue, update, remove
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+/* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
   authDomain: "agendamovom.firebaseapp.com",
@@ -109,11 +136,17 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const tabela = document.getElementById("tabela");
-const vencidas = document.getElementById("vencidas");
+/* ===== REFS ===== */
 const alunosRef = ref(db, "alunos");
+const agendaRef = ref(db, "agenda");
 
-/* ===== REAVALIAÇÃO +3 MESES ===== */
+const tabelaAlunos = document.getElementById("tabelaAlunos");
+const vencidas = document.getElementById("vencidas");
+const agendaTabela = document.getElementById("agenda");
+
+let alunosCache = {};
+
+/* ===== FUNÇÃO REAVALIAÇÃO ===== */
 function calcReavaliacao(data) {
     if (!data) return "";
     const d = new Date(data);
@@ -121,15 +154,15 @@ function calcReavaliacao(data) {
     return d.toISOString().split("T")[0];
 }
 
-/* ===== RENDER ===== */
-function render(snapshot) {
-    tabela.innerHTML = "";
+/* ===== RENDER ALUNOS ===== */
+function renderAlunos(snapshot) {
+    tabelaAlunos.innerHTML = "";
     vencidas.innerHTML = "";
+    alunosCache = snapshot.val() || {};
 
     const hoje = new Date();
-    const dados = snapshot.val() || {};
 
-    Object.entries(dados).forEach(([id, d]) => {
+    Object.entries(alunosCache).forEach(([id, d]) => {
         const tr = document.createElement("tr");
 
         tr.innerHTML = `
@@ -140,14 +173,13 @@ function render(snapshot) {
 <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
 </select>
 </td>
-<td><input value="${d.dataSemana || ""}"></td>
 <td><input type="date" value="${d.dataAvaliacao || ""}"></td>
 <td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
 <td>
 <select>
+<option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
 <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
 <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
-<option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
 </select>
 </td>
 <td><button>🗑️</button></td>
@@ -159,22 +191,21 @@ function render(snapshot) {
             const dadosAtualizados = {
                 nome: i[0].value,
                 tipo: i[1].value,
-                dataSemana: i[2].value,
-                dataAvaliacao: i[3].value,
-                dataReavaliacao: calcReavaliacao(i[3].value),
-                plano: i[5].value
+                dataAvaliacao: i[2].value,
+                dataReavaliacao: calcReavaliacao(i[2].value),
+                plano: i[4].value
             };
-            i[4].value = dadosAtualizados.dataReavaliacao;
+            i[3].value = dadosAtualizados.dataReavaliacao;
             update(ref(db, `alunos/${id}`), dadosAtualizados);
         });
 
         tr.querySelector("button").onclick = () => {
-            if (confirm("Apagar este aluno?")) {
+            if (confirm("Excluir aluno?")) {
                 remove(ref(db, `alunos/${id}`));
             }
         };
 
-        tabela.appendChild(tr);
+        tabelaAlunos.appendChild(tr);
 
         if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
             vencidas.innerHTML += `
@@ -188,19 +219,105 @@ function render(snapshot) {
     });
 }
 
+/* ===== RENDER AGENDA ===== */
+function renderAgenda(snapshot) {
+    agendaTabela.innerHTML = "";
+    const dados = snapshot.val() || {};
+
+    Object.entries(dados).forEach(([id, d]) => {
+        const tr = document.createElement("tr");
+        tr.className = d.status === "Atendido" ? "atendido" : "nao-atendido";
+
+        tr.innerHTML = `
+<td>
+<select>
+${Object.values(alunosCache).map(a =>
+ `<option ${a.nome===d.nome?"selected":""}>${a.nome}</option>`
+).join("")}
+</select>
+</td>
+
+<td>
+<select>
+<option ${d.modalidade==="Fisioterapia"?"selected":""}>Fisioterapia</option>
+<option ${d.modalidade==="Pilates"?"selected":""}>Pilates</option>
+<option ${d.modalidade==="Yoga"?"selected":""}>Yoga</option>
+<option ${d.modalidade==="Avaliação"?"selected":""}>Avaliação</option>
+</select>
+</td>
+
+<td><input type="date" value="${d.data || ""}"></td>
+
+<td>
+<select>${gerarHorarios(d.horario)}</select>
+</td>
+
+<td>
+<select>
+<option ${d.status==="Não atendido"?"selected":""}>Não atendido</option>
+<option ${d.status==="Atendido"?"selected":""}>Atendido</option>
+</select>
+</td>
+
+<td><button>🗑️</button></td>
+`;
+
+        const i = tr.querySelectorAll("select, input");
+
+        tr.addEventListener("change", () => {
+            update(ref(db, `agenda/${id}`), {
+                nome: i[0].value,
+                modalidade: i[1].value,
+                data: i[2].value,
+                horario: i[3].value,
+                status: i[4].value
+            });
+        });
+
+        tr.querySelector("button").onclick = () => {
+            if (confirm("Excluir horário?")) {
+                remove(ref(db, `agenda/${id}`));
+            }
+        };
+
+        agendaTabela.appendChild(tr);
+    });
+}
+
+/* ===== HORÁRIOS ===== */
+function gerarHorarios(sel) {
+    let h = "";
+    for (let i = 7; i <= 20; i++) {
+        ["00","30"].forEach(m => {
+            const hr = `${String(i).padStart(2,"0")}:${m}`;
+            h += `<option ${hr===sel?"selected":""}>${hr}</option>`;
+        });
+    }
+    return h;
+}
+
 /* ===== TEMPO REAL ===== */
-onValue(alunosRef, render);
+onValue(alunosRef, renderAlunos);
+onValue(agendaRef, renderAgenda);
 
 /* ===== ADICIONAR ===== */
-window.adicionarLinha = () => {
-    const novo = push(alunosRef);
-    set(novo, {
+window.adicionarAluno = () => {
+    set(push(alunosRef), {
         nome: "",
         tipo: "Avaliação",
-        dataSemana: "",
         dataAvaliacao: "",
         dataReavaliacao: "",
         plano: "Mensal"
+    });
+};
+
+window.adicionarHorario = () => {
+    set(push(agendaRef), {
+        nome: "",
+        modalidade: "Fisioterapia",
+        data: "",
+        horario: "08:00",
+        status: "Não atendido"
     });
 };
 </script>

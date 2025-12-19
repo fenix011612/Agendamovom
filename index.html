@@ -38,12 +38,6 @@ th {
 .vencida {
     background: #ffd6d6;
 }
-.atendido {
-    background: #d4f8e8;
-}
-.nao-atendido {
-    background: #ffe2e2;
-}
 input, select {
     width: 100%;
     padding: 6px;
@@ -61,11 +55,11 @@ button {
 
 <body>
 
-<h1>Agenda de Avaliações e Atendimentos</h1>
+<h1>Agenda de Avaliações</h1>
 
 <!-- ===== ALUNOS ===== -->
 <div class="container">
-<h2>👤 Alunos</h2>
+<h2>👤 Alunos (ordem por data de avaliação)</h2>
 <table>
 <thead>
 <tr>
@@ -84,7 +78,7 @@ button {
 
 <!-- ===== REAVALIAÇÕES ===== -->
 <div class="container">
-<h2>⚠️ Reavaliações Vencidas</h2>
+<h2>⚠️ Reavaliações Vencidas (ordem por reavaliação)</h2>
 <table>
 <thead>
 <tr>
@@ -96,25 +90,6 @@ button {
 </thead>
 <tbody id="vencidas"></tbody>
 </table>
-</div>
-
-<!-- ===== AGENDA ===== -->
-<div class="container">
-<h2>📅 Agenda de Atendimentos</h2>
-<table>
-<thead>
-<tr>
-<th>Aluno</th>
-<th>Modalidade</th>
-<th>Data</th>
-<th>Horário</th>
-<th>Status</th>
-<th>Ação</th>
-</tr>
-</thead>
-<tbody id="agenda"></tbody>
-</table>
-<button onclick="adicionarHorario()">➕ Novo Horário</button>
 </div>
 
 <script type="module">
@@ -138,13 +113,9 @@ const db = getDatabase(app);
 
 /* ===== REFS ===== */
 const alunosRef = ref(db, "alunos");
-const agendaRef = ref(db, "agenda");
 
 const tabelaAlunos = document.getElementById("tabelaAlunos");
 const vencidas = document.getElementById("vencidas");
-const agendaTabela = document.getElementById("agenda");
-
-let alunosCache = {};
 
 /* ===== FUNÇÃO REAVALIAÇÃO ===== */
 function calcReavaliacao(data) {
@@ -158,11 +129,16 @@ function calcReavaliacao(data) {
 function renderAlunos(snapshot) {
     tabelaAlunos.innerHTML = "";
     vencidas.innerHTML = "";
-    alunosCache = snapshot.val() || {};
 
+    const alunos = snapshot.val() || {};
     const hoje = new Date();
 
-    Object.entries(alunosCache).forEach(([id, d]) => {
+    const lista = Object.entries(alunos).map(([id, d]) => ({ id, ...d }));
+
+    /* ORDEM POR DATA DE AVALIAÇÃO */
+    lista.sort((a, b) => new Date(a.dataAvaliacao || 0) - new Date(b.dataAvaliacao || 0));
+
+    lista.forEach(d => {
         const tr = document.createElement("tr");
 
         tr.innerHTML = `
@@ -188,117 +164,43 @@ function renderAlunos(snapshot) {
         const i = tr.querySelectorAll("input, select");
 
         tr.addEventListener("change", () => {
-            const dadosAtualizados = {
+            const atualizado = {
                 nome: i[0].value,
                 tipo: i[1].value,
                 dataAvaliacao: i[2].value,
                 dataReavaliacao: calcReavaliacao(i[2].value),
                 plano: i[4].value
             };
-            i[3].value = dadosAtualizados.dataReavaliacao;
-            update(ref(db, `alunos/${id}`), dadosAtualizados);
+            i[3].value = atualizado.dataReavaliacao;
+            update(ref(db, `alunos/${d.id}`), atualizado);
         });
 
         tr.querySelector("button").onclick = () => {
             if (confirm("Excluir aluno?")) {
-                remove(ref(db, `alunos/${id}`));
+                remove(ref(db, `alunos/${d.id}`));
             }
         };
 
         tabelaAlunos.appendChild(tr);
+    });
 
-        if (d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje) {
-            vencidas.innerHTML += `
+    /* ===== REAVALIAÇÕES VENCIDAS ORDENADAS ===== */
+    lista
+      .filter(d => d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje)
+      .sort((a, b) => new Date(a.dataReavaliacao) - new Date(b.dataReavaliacao))
+      .forEach(d => {
+        vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
 <td>${d.dataAvaliacao}</td>
 <td>${d.dataReavaliacao}</td>
 <td>${d.plano}</td>
 </tr>`;
-        }
-    });
-}
-
-/* ===== RENDER AGENDA ===== */
-function renderAgenda(snapshot) {
-    agendaTabela.innerHTML = "";
-    const dados = snapshot.val() || {};
-
-    Object.entries(dados).forEach(([id, d]) => {
-        const tr = document.createElement("tr");
-        tr.className = d.status === "Atendido" ? "atendido" : "nao-atendido";
-
-        tr.innerHTML = `
-<td>
-<select>
-${Object.values(alunosCache).map(a =>
- `<option ${a.nome===d.nome?"selected":""}>${a.nome}</option>`
-).join("")}
-</select>
-</td>
-
-<td>
-<select>
-<option ${d.modalidade==="Fisioterapia"?"selected":""}>Fisioterapia</option>
-<option ${d.modalidade==="Pilates"?"selected":""}>Pilates</option>
-<option ${d.modalidade==="Yoga"?"selected":""}>Yoga</option>
-<option ${d.modalidade==="Avaliação"?"selected":""}>Avaliação</option>
-</select>
-</td>
-
-<td><input type="date" value="${d.data || ""}"></td>
-
-<td>
-<select>${gerarHorarios(d.horario)}</select>
-</td>
-
-<td>
-<select>
-<option ${d.status==="Não atendido"?"selected":""}>Não atendido</option>
-<option ${d.status==="Atendido"?"selected":""}>Atendido</option>
-</select>
-</td>
-
-<td><button>🗑️</button></td>
-`;
-
-        const i = tr.querySelectorAll("select, input");
-
-        tr.addEventListener("change", () => {
-            update(ref(db, `agenda/${id}`), {
-                nome: i[0].value,
-                modalidade: i[1].value,
-                data: i[2].value,
-                horario: i[3].value,
-                status: i[4].value
-            });
-        });
-
-        tr.querySelector("button").onclick = () => {
-            if (confirm("Excluir horário?")) {
-                remove(ref(db, `agenda/${id}`));
-            }
-        };
-
-        agendaTabela.appendChild(tr);
-    });
-}
-
-/* ===== HORÁRIOS ===== */
-function gerarHorarios(sel) {
-    let h = "";
-    for (let i = 7; i <= 20; i++) {
-        ["00","30"].forEach(m => {
-            const hr = `${String(i).padStart(2,"0")}:${m}`;
-            h += `<option ${hr===sel?"selected":""}>${hr}</option>`;
-        });
-    }
-    return h;
+      });
 }
 
 /* ===== TEMPO REAL ===== */
 onValue(alunosRef, renderAlunos);
-onValue(agendaRef, renderAgenda);
 
 /* ===== ADICIONAR ===== */
 window.adicionarAluno = () => {
@@ -310,17 +212,8 @@ window.adicionarAluno = () => {
         plano: "Mensal"
     });
 };
-
-window.adicionarHorario = () => {
-    set(push(agendaRef), {
-        nome: "",
-        modalidade: "Fisioterapia",
-        data: "",
-        horario: "08:00",
-        status: "Não atendido"
-    });
-};
 </script>
 
 </body>
 </html>
+

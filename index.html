@@ -43,12 +43,15 @@ input, select {
     padding: 6px;
 }
 button {
-    padding: 10px;
+    padding: 8px 10px;
     background: #4ecdc4;
     color: #fff;
     border: none;
     border-radius: 6px;
     cursor: pointer;
+}
+.confirmar {
+    background: #5a2d82;
 }
 </style>
 </head>
@@ -59,7 +62,7 @@ button {
 
 <!-- ===== ALUNOS ===== -->
 <div class="container">
-<h2>👤 Alunos (ordem por data de avaliação)</h2>
+<h2>👤 Alunos</h2>
 <table>
 <thead>
 <tr>
@@ -68,6 +71,7 @@ button {
 <th>Data Avaliação</th>
 <th>Reavaliação</th>
 <th>Plano</th>
+<th>Confirmar</th>
 <th>Ação</th>
 </tr>
 </thead>
@@ -78,7 +82,7 @@ button {
 
 <!-- ===== REAVALIAÇÕES ===== -->
 <div class="container">
-<h2>⚠️ Reavaliações Vencidas (ordem por reavaliação)</h2>
+<h2>⚠️ Reavaliações Vencidas</h2>
 <table>
 <thead>
 <tr>
@@ -117,15 +121,18 @@ const alunosRef = ref(db, "alunos");
 const tabelaAlunos = document.getElementById("tabelaAlunos");
 const vencidas = document.getElementById("vencidas");
 
-/* ===== FUNÇÃO REAVALIAÇÃO ===== */
+/* ===== FUNÇÕES ===== */
+function hojeISO() {
+    return new Date().toISOString().split("T")[0];
+}
+
 function calcReavaliacao(data) {
-    if (!data) return "";
     const d = new Date(data);
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
 }
 
-/* ===== RENDER ALUNOS ===== */
+/* ===== RENDER ===== */
 function renderAlunos(snapshot) {
     tabelaAlunos.innerHTML = "";
     vencidas.innerHTML = "";
@@ -133,10 +140,9 @@ function renderAlunos(snapshot) {
     const alunos = snapshot.val() || {};
     const hoje = new Date();
 
-    const lista = Object.entries(alunos).map(([id, d]) => ({ id, ...d }));
-
-    /* ORDEM POR DATA DE AVALIAÇÃO */
-    lista.sort((a, b) => new Date(a.dataAvaliacao || 0) - new Date(b.dataAvaliacao || 0));
+    const lista = Object.entries(alunos)
+        .map(([id, d]) => ({ id, ...d }))
+        .sort((a, b) => new Date(a.dataAvaliacao || 0) - new Date(b.dataAvaliacao || 0));
 
     lista.forEach(d => {
         const tr = document.createElement("tr");
@@ -158,24 +164,34 @@ function renderAlunos(snapshot) {
 <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
 </select>
 </td>
+<td><button class="confirmar">✔️</button></td>
 <td><button>🗑️</button></td>
 `;
 
         const i = tr.querySelectorAll("input, select");
 
         tr.addEventListener("change", () => {
-            const atualizado = {
+            const dataAval = i[2].value;
+            update(ref(db, `alunos/${d.id}`), {
                 nome: i[0].value,
                 tipo: i[1].value,
-                dataAvaliacao: i[2].value,
-                dataReavaliacao: calcReavaliacao(i[2].value),
+                dataAvaliacao: dataAval,
+                dataReavaliacao: dataAval ? calcReavaliacao(dataAval) : "",
                 plano: i[4].value
-            };
-            i[3].value = atualizado.dataReavaliacao;
-            update(ref(db, `alunos/${d.id}`), atualizado);
+            });
         });
 
-        tr.querySelector("button").onclick = () => {
+        /* CONFIRMAR AVALIAÇÃO */
+        tr.querySelector(".confirmar").onclick = () => {
+            const hoje = hojeISO();
+            update(ref(db, `alunos/${d.id}`), {
+                dataAvaliacao: hoje,
+                dataReavaliacao: calcReavaliacao(hoje)
+            });
+        };
+
+        /* EXCLUIR */
+        tr.querySelectorAll("button")[1].onclick = () => {
             if (confirm("Excluir aluno?")) {
                 remove(ref(db, `alunos/${d.id}`));
             }
@@ -184,19 +200,19 @@ function renderAlunos(snapshot) {
         tabelaAlunos.appendChild(tr);
     });
 
-    /* ===== REAVALIAÇÕES VENCIDAS ORDENADAS ===== */
+    /* ===== VENCIDAS ===== */
     lista
-      .filter(d => d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje)
-      .sort((a, b) => new Date(a.dataReavaliacao) - new Date(b.dataReavaliacao))
-      .forEach(d => {
-        vencidas.innerHTML += `
+        .filter(d => d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje)
+        .sort((a, b) => new Date(a.dataReavaliacao) - new Date(b.dataReavaliacao))
+        .forEach(d => {
+            vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
 <td>${d.dataAvaliacao}</td>
 <td>${d.dataReavaliacao}</td>
 <td>${d.plano}</td>
 </tr>`;
-      });
+        });
 }
 
 /* ===== TEMPO REAL ===== */
@@ -216,4 +232,3 @@ window.adicionarAluno = () => {
 
 </body>
 </html>
-

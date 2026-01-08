@@ -38,6 +38,12 @@ th {
 .vencida {
     background: #ffd6d6;
 }
+.vencendo {
+    background: #fff3cd;
+}
+.hoje {
+    background: #ffe066;
+}
 input, select {
     width: 100%;
     padding: 5px;
@@ -63,9 +69,9 @@ button {
 
 <h1>Agenda de Avaliações</h1>
 
-<!-- ===== ALUNOS ===== -->
+<!-- ===== AGENDA EM DIA ===== -->
 <div class="container">
-<h2>👤 Agenda em dia</h2>
+<h2>📅 Agenda em dia</h2>
 <table>
 <thead>
 <tr>
@@ -75,8 +81,8 @@ button {
 <th>Horário</th>
 <th>Reavaliação</th>
 <th>Plano</th>
-<th>Confirmar</th>
-<th>Ação</th>
+<th>✔️</th>
+<th>🗑️</th>
 </tr>
 </thead>
 <tbody id="tabelaAlunos"></tbody>
@@ -84,15 +90,15 @@ button {
 <button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
-<!-- ===== REAVALIAÇÕES ===== -->
+<!-- ===== VENCIDAS ===== -->
 <div class="container">
-<h2>⚠️ Reavaliações Vencidas</h2>
+<h2>⚠️ Reavaliações vencidas</h2>
 <table>
 <thead>
 <tr>
 <th>Nome</th>
 <th>Última Avaliação</th>
-<th>Nova Reavaliação</th>
+<th>Nova Data</th>
 <th>Horário</th>
 <th>OK</th>
 </tr>
@@ -107,6 +113,7 @@ import {
   getDatabase, ref, push, set, onValue, update, remove
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+/* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
   authDomain: "agendamovom.firebaseapp.com",
@@ -123,12 +130,14 @@ const alunosRef = ref(db, "alunos");
 const tabelaAlunos = document.getElementById("tabelaAlunos");
 const vencidas = document.getElementById("vencidas");
 
+/* ===== FUNÇÕES ===== */
 function hojeISO() {
     return new Date().toISOString().split("T")[0];
 }
 
 function calcReavaliacao(data) {
-    const d = new Date(data);
+    if (!data) return "";
+    const d = new Date(data + "T00:00");
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
 }
@@ -151,10 +160,18 @@ function renderAlunos(snapshot) {
         });
 
     lista.forEach(d => {
-        const vencida = d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje;
+        const dataReav = d.dataReavaliacao ? new Date(d.dataReavaliacao) : null;
+        const diff = dataReav ? Math.ceil((dataReav - hoje) / 86400000) : null;
+
+        const vencida = diff !== null && diff < 0;
+        const vencendo = diff !== null && diff > 0 && diff <= 7;
+        const hojeReav = diff === 0;
 
         if (!vencida) {
             const tr = document.createElement("tr");
+            if (vencendo) tr.classList.add("vencendo");
+            if (hojeReav) tr.classList.add("hoje");
+
             tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
@@ -185,16 +202,16 @@ function renderAlunos(snapshot) {
                     tipo: i[1].value,
                     dataAvaliacao: i[2].value,
                     horario: i[3].value,
-                    dataReavaliacao: i[2].value ? calcReavaliacao(i[2].value) : "",
+                    dataReavaliacao: calcReavaliacao(i[2].value),
                     plano: i[4].value
                 });
             });
 
             tr.querySelector(".confirmar").onclick = () => {
-                const hoje = hojeISO();
+                const hojeData = hojeISO();
                 update(ref(db, `alunos/${d.id}`), {
-                    dataAvaliacao: hoje,
-                    dataReavaliacao: calcReavaliacao(hoje)
+                    dataAvaliacao: hojeData,
+                    dataReavaliacao: calcReavaliacao(hojeData)
                 });
             };
 
@@ -235,7 +252,23 @@ window.reagendar = (id) => {
     });
 };
 
-onValue(alunosRef, renderAlunos);
+/* ===== TEMPO REAL + ALERTA ===== */
+onValue(alunosRef, snapshot => {
+    renderAlunos(snapshot);
+
+    const alunos = snapshot.val() || {};
+    const hoje = new Date();
+
+    const alertas = Object.values(alunos).filter(a => {
+        if (!a.dataReavaliacao) return false;
+        const diff = Math.ceil((new Date(a.dataReavaliacao) - hoje) / 86400000);
+        return diff <= 0;
+    });
+
+    if (alertas.length > 0) {
+        alert(`⚠️ Atenção!\nVocê tem ${alertas.length} reavaliação(ões) vencida(s) ou vencendo hoje.`);
+    }
+});
 
 /* ===== ADICIONAR ===== */
 window.adicionarAluno = () => {

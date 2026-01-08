@@ -16,7 +16,7 @@ h1, h2 {
     color: #5a2d82;
 }
 .container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: auto;
     background: #fff;
     padding: 20px;
@@ -29,7 +29,7 @@ table {
 }
 th, td {
     border: 1px solid #ddd;
-    padding: 8px;
+    padding: 6px;
     text-align: center;
 }
 th {
@@ -40,10 +40,10 @@ th {
 }
 input, select {
     width: 100%;
-    padding: 6px;
+    padding: 5px;
 }
 button {
-    padding: 8px 10px;
+    padding: 6px 10px;
     background: #4ecdc4;
     color: #fff;
     border: none;
@@ -52,6 +52,9 @@ button {
 }
 .confirmar {
     background: #5a2d82;
+}
+.ok {
+    background: #28a745;
 }
 </style>
 </head>
@@ -62,13 +65,14 @@ button {
 
 <!-- ===== ALUNOS ===== -->
 <div class="container">
-<h2>👤 Alunos</h2>
+<h2>👤 Agenda em dia</h2>
 <table>
 <thead>
 <tr>
 <th>Nome</th>
 <th>Tipo</th>
-<th>Data Avaliação</th>
+<th>Data</th>
+<th>Horário</th>
 <th>Reavaliação</th>
 <th>Plano</th>
 <th>Confirmar</th>
@@ -88,8 +92,9 @@ button {
 <tr>
 <th>Nome</th>
 <th>Última Avaliação</th>
-<th>Reavaliação</th>
-<th>Plano</th>
+<th>Nova Reavaliação</th>
+<th>Horário</th>
+<th>OK</th>
 </tr>
 </thead>
 <tbody id="vencidas"></tbody>
@@ -102,7 +107,6 @@ import {
   getDatabase, ref, push, set, onValue, update, remove
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-/* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
   authDomain: "agendamovom.firebaseapp.com",
@@ -114,14 +118,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-
-/* ===== REFS ===== */
 const alunosRef = ref(db, "alunos");
 
 const tabelaAlunos = document.getElementById("tabelaAlunos");
 const vencidas = document.getElementById("vencidas");
 
-/* ===== FUNÇÕES ===== */
 function hojeISO() {
     return new Date().toISOString().split("T")[0];
 }
@@ -142,12 +143,19 @@ function renderAlunos(snapshot) {
 
     const lista = Object.entries(alunos)
         .map(([id, d]) => ({ id, ...d }))
-        .sort((a, b) => new Date(a.dataAvaliacao || 0) - new Date(b.dataAvaliacao || 0));
+        .sort((a, b) => {
+            const da = new Date(`${a.dataAvaliacao || "2100-01-01"} ${a.horario || "00:00"}`);
+            const db = new Date(`${b.dataAvaliacao || "2100-01-01"} ${b.horario || "00:00"}`);
+            if (da - db !== 0) return da - db;
+            return new Date(a.dataReavaliacao || "2100-01-01") - new Date(b.dataReavaliacao || "2100-01-01");
+        });
 
     lista.forEach(d => {
-        const tr = document.createElement("tr");
+        const vencida = d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje;
 
-        tr.innerHTML = `
+        if (!vencida) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
 <select>
@@ -156,7 +164,8 @@ function renderAlunos(snapshot) {
 </select>
 </td>
 <td><input type="date" value="${d.dataAvaliacao || ""}"></td>
-<td><input type="date" value="${d.dataReavaliacao || ""}" readonly></td>
+<td><input type="time" value="${d.horario || ""}"></td>
+<td>${d.dataReavaliacao || ""}</td>
 <td>
 <select>
 <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
@@ -168,54 +177,64 @@ function renderAlunos(snapshot) {
 <td><button>🗑️</button></td>
 `;
 
-        const i = tr.querySelectorAll("input, select");
+            const i = tr.querySelectorAll("input, select");
 
-        tr.addEventListener("change", () => {
-            const dataAval = i[2].value;
-            update(ref(db, `alunos/${d.id}`), {
-                nome: i[0].value,
-                tipo: i[1].value,
-                dataAvaliacao: dataAval,
-                dataReavaliacao: dataAval ? calcReavaliacao(dataAval) : "",
-                plano: i[4].value
+            tr.addEventListener("change", () => {
+                update(ref(db, `alunos/${d.id}`), {
+                    nome: i[0].value,
+                    tipo: i[1].value,
+                    dataAvaliacao: i[2].value,
+                    horario: i[3].value,
+                    dataReavaliacao: i[2].value ? calcReavaliacao(i[2].value) : "",
+                    plano: i[4].value
+                });
             });
-        });
 
-        /* CONFIRMAR AVALIAÇÃO */
-        tr.querySelector(".confirmar").onclick = () => {
-            const hoje = hojeISO();
-            update(ref(db, `alunos/${d.id}`), {
-                dataAvaliacao: hoje,
-                dataReavaliacao: calcReavaliacao(hoje)
-            });
-        };
+            tr.querySelector(".confirmar").onclick = () => {
+                const hoje = hojeISO();
+                update(ref(db, `alunos/${d.id}`), {
+                    dataAvaliacao: hoje,
+                    dataReavaliacao: calcReavaliacao(hoje)
+                });
+            };
 
-        /* EXCLUIR */
-        tr.querySelectorAll("button")[1].onclick = () => {
-            if (confirm("Excluir aluno?")) {
-                remove(ref(db, `alunos/${d.id}`));
-            }
-        };
+            tr.querySelectorAll("button")[1].onclick = () => {
+                if (confirm("Excluir aluno?")) {
+                    remove(ref(db, `alunos/${d.id}`));
+                }
+            };
 
-        tabelaAlunos.appendChild(tr);
-    });
-
-    /* ===== VENCIDAS ===== */
-    lista
-        .filter(d => d.dataReavaliacao && new Date(d.dataReavaliacao) < hoje)
-        .sort((a, b) => new Date(a.dataReavaliacao) - new Date(b.dataReavaliacao))
-        .forEach(d => {
+            tabelaAlunos.appendChild(tr);
+        } else {
             vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
-<td>${d.dataAvaliacao}</td>
-<td>${d.dataReavaliacao}</td>
-<td>${d.plano}</td>
+<td>${d.dataAvaliacao || ""}</td>
+<td><input type="date" id="d${d.id}"></td>
+<td><input type="time" id="h${d.id}"></td>
+<td><button class="ok" onclick="reagendar('${d.id}')">OK</button></td>
 </tr>`;
-        });
+        }
+    });
 }
 
-/* ===== TEMPO REAL ===== */
+/* ===== REAGENDAR ===== */
+window.reagendar = (id) => {
+    const novaData = document.getElementById(`d${id}`).value;
+    const novoHorario = document.getElementById(`h${id}`).value;
+
+    if (!novaData || !novoHorario) {
+        alert("Preencha data e horário");
+        return;
+    }
+
+    update(ref(db, `alunos/${id}`), {
+        dataAvaliacao: novaData,
+        horario: novoHorario,
+        dataReavaliacao: calcReavaliacao(novaData)
+    });
+};
+
 onValue(alunosRef, renderAlunos);
 
 /* ===== ADICIONAR ===== */
@@ -224,6 +243,7 @@ window.adicionarAluno = () => {
         nome: "",
         tipo: "Avaliação",
         dataAvaliacao: "",
+        horario: "",
         dataReavaliacao: "",
         plano: "Mensal"
     });

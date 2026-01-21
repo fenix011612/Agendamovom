@@ -44,20 +44,25 @@ th {
 .hoje {
     background: #ffe066;
 }
+.realizada {
+    background: #d4edda;
+}
 input, select {
     width: 100%;
     padding: 5px;
 }
 button {
     padding: 6px 10px;
-    background: #4ecdc4;
     color: #fff;
     border: none;
     border-radius: 6px;
     cursor: pointer;
 }
 .confirmar {
-    background: #5a2d82;
+    background: #6f42c1;
+}
+.confirmada {
+    background: #28a745;
 }
 .ok {
     background: #28a745;
@@ -69,7 +74,6 @@ button {
 
 <h1>Agenda de Avaliações</h1>
 
-<!-- AGENDA EM DIA -->
 <div class="container">
 <h2>📅 Agenda em dia</h2>
 <table>
@@ -90,7 +94,6 @@ button {
 <button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
-<!-- VENCIDAS -->
 <div class="container">
 <h2>⚠️ Reavaliações vencidas</h2>
 <table>
@@ -154,16 +157,14 @@ onValue(alunosRef, snapshot => {
     const hoje = new Date();
 
     Object.entries(alunos).forEach(([id, d]) => {
+        const realizada = d.avaliacaoRealizada === true;
         const dataReav = d.dataReavaliacao ? new Date(d.dataReavaliacao) : null;
         const diff = dataReav ? Math.ceil((dataReav - hoje) / 86400000) : null;
         const vencida = diff !== null && diff < 0;
-        const vencendo = diff !== null && diff > 0 && diff <= 7;
-        const hojeReav = diff === 0;
 
         if (!vencida) {
             const tr = document.createElement("tr");
-            if (vencendo) tr.classList.add("vencendo");
-            if (hojeReav) tr.classList.add("hoje");
+            if (realizada) tr.classList.add("realizada");
 
             tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
@@ -183,58 +184,41 @@ onValue(alunosRef, snapshot => {
 <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
 </select>
 </td>
-<td><button class="confirmar">✔️</button></td>
-<td><button>🗑️</button></td>
+<td>
+<button class="${realizada ? "confirmada" : "confirmar"}">✔️</button>
+</td>
+<td><button onclick="excluir('${id}')">🗑️</button></td>
 `;
 
             const campos = tr.querySelectorAll("input, select");
+            const btn = tr.querySelector("button");
 
-            tr.querySelector(".confirmar").onclick = () => {
+            btn.onclick = () => {
+                if (!confirm("Essa avaliação foi realizada?")) return;
+
                 const data = campos[2].value || hojeISO();
+
                 update(ref(db, `alunos/${id}`), {
                     nome: campos[0].value,
                     tipo: campos[1].value,
                     dataAvaliacao: data,
                     horario: campos[3].value,
                     dataReavaliacao: calcReavaliacao(data),
-                    plano: campos[4].value
+                    plano: campos[4].value,
+                    avaliacaoRealizada: true
                 });
             };
 
-            tr.querySelectorAll("button")[1].onclick = () => {
-                if (confirm("Excluir aluno?")) {
-                    remove(ref(db, `alunos/${id}`));
-                }
-            };
-
             tabelaAlunos.appendChild(tr);
-        } else {
-            const novaData = hojeISO();
-
-            vencidas.innerHTML += `
-<tr class="vencida">
-<td>${d.nome}</td>
-<td>${br(d.dataAvaliacao)}</td>
-<td>${br(novaData)}</td>
-<td><input type="time" id="h${id}"></td>
-<td>
-<button class="ok" onclick="reagendar('${id}', '${novaData}')">OK</button>
-</td>
-</tr>`;
         }
     });
 });
 
-/* REAGENDAR AUTOMÁTICO */
-window.reagendar = (id, data) => {
-    const hora = document.getElementById(`h${id}`).value;
-    if (!hora) return alert("Preencha o horário");
-
-    update(ref(db, `alunos/${id}`), {
-        dataAvaliacao: data,
-        horario: hora,
-        dataReavaliacao: calcReavaliacao(data)
-    });
+/* EXCLUIR */
+window.excluir = (id) => {
+    if (confirm("Excluir aluno?")) {
+        remove(ref(db, `alunos/${id}`));
+    }
 };
 
 /* ADD */
@@ -245,11 +229,14 @@ window.adicionarAluno = () => {
         dataAvaliacao: "",
         horario: "",
         dataReavaliacao: "",
-        plano: "Mensal"
+        plano: "Mensal",
+        avaliacaoRealizada: false
     });
 };
 </script>
 
 </body>
 </html>
+
+
 

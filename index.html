@@ -38,14 +38,23 @@ th {
 .vencida {
     background: #ffd6d6;
 }
-.vencendo {
-    background: #fff3cd;
-}
-.hoje {
-    background: #ffe066;
-}
 .realizada {
     background: #d4edda;
+}
+.filtros {
+    text-align: center;
+    margin-bottom: 15px;
+}
+.filtros button {
+    margin: 0 5px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+}
+.filtros .ativo {
+    background: #5a2d82;
+    color: #fff;
 }
 input, select {
     width: 100%;
@@ -53,19 +62,21 @@ input, select {
 }
 button {
     padding: 6px 10px;
-    color: #fff;
     border: none;
     border-radius: 6px;
     cursor: pointer;
 }
 .confirmar {
     background: #6f42c1;
+    color: #fff;
 }
 .confirmada {
     background: #28a745;
+    color: #fff;
 }
 .ok {
     background: #28a745;
+    color: #fff;
 }
 </style>
 </head>
@@ -76,6 +87,13 @@ button {
 
 <div class="container">
 <h2>📅 Agenda em dia</h2>
+
+<div class="filtros">
+    <button class="ativo" onclick="setFiltro('todas', this)">Todas</button>
+    <button onclick="setFiltro('pendentes', this)">⏳ Pendentes</button>
+    <button onclick="setFiltro('realizadas', this)">✅ Realizadas</button>
+</div>
+
 <table>
 <thead>
 <tr>
@@ -91,23 +109,8 @@ button {
 </thead>
 <tbody id="tabelaAlunos"></tbody>
 </table>
-<button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
-</div>
 
-<div class="container">
-<h2>⚠️ Reavaliações vencidas</h2>
-<table>
-<thead>
-<tr>
-<th>Nome</th>
-<th>Última Avaliação</th>
-<th>Nova Data</th>
-<th>Horário</th>
-<th>OK</th>
-</tr>
-</thead>
-<tbody id="vencidas"></tbody>
-</table>
+<button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
 <script type="module">
@@ -131,7 +134,8 @@ const db = getDatabase(app);
 const alunosRef = ref(db, "alunos");
 
 const tabelaAlunos = document.getElementById("tabelaAlunos");
-const vencidas = document.getElementById("vencidas");
+
+let filtroAtual = "todas";
 
 /* UTIL */
 const hojeISO = () => new Date().toISOString().split("T")[0];
@@ -148,25 +152,32 @@ const calcReavaliacao = (data) => {
     return d.toISOString().split("T")[0];
 };
 
+/* FILTRO */
+window.setFiltro = (filtro, btn) => {
+    filtroAtual = filtro;
+    document.querySelectorAll(".filtros button").forEach(b => b.classList.remove("ativo"));
+    btn.classList.add("ativo");
+    renderCache();
+};
+
+let cache = {};
+
 /* RENDER */
-onValue(alunosRef, snapshot => {
+function renderCache() {
     tabelaAlunos.innerHTML = "";
-    vencidas.innerHTML = "";
 
-    const alunos = snapshot.val() || {};
-    const hoje = new Date();
-
-    Object.entries(alunos).forEach(([id, d]) => {
+    Object.entries(cache).forEach(([id, d]) => {
         const realizada = d.avaliacaoRealizada === true;
-        const dataReav = d.dataReavaliacao ? new Date(d.dataReavaliacao) : null;
-        const diff = dataReav ? Math.ceil((dataReav - hoje) / 86400000) : null;
-        const vencida = diff !== null && diff < 0;
 
-        if (!vencida) {
-            const tr = document.createElement("tr");
-            if (realizada) tr.classList.add("realizada");
+        if (
+            (filtroAtual === "pendentes" && realizada) ||
+            (filtroAtual === "realizadas" && !realizada)
+        ) return;
 
-            tr.innerHTML = `
+        const tr = document.createElement("tr");
+        if (realizada) tr.classList.add("realizada");
+
+        tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
 <select>
@@ -185,34 +196,33 @@ onValue(alunosRef, snapshot => {
 </select>
 </td>
 <td>
-<button class="${realizada ? "confirmada" : "confirmar"}">✔️</button>
+<button class="${realizada ? "confirmada" : "confirmar"}" onclick="confirmar('${id}')">✔️</button>
 </td>
 <td><button onclick="excluir('${id}')">🗑️</button></td>
 `;
 
-            const campos = tr.querySelectorAll("input, select");
-            const btn = tr.querySelector("button");
-
-            btn.onclick = () => {
-                if (!confirm("Essa avaliação foi realizada?")) return;
-
-                const data = campos[2].value || hojeISO();
-
-                update(ref(db, `alunos/${id}`), {
-                    nome: campos[0].value,
-                    tipo: campos[1].value,
-                    dataAvaliacao: data,
-                    horario: campos[3].value,
-                    dataReavaliacao: calcReavaliacao(data),
-                    plano: campos[4].value,
-                    avaliacaoRealizada: true
-                });
-            };
-
-            tabelaAlunos.appendChild(tr);
-        }
+        tabelaAlunos.appendChild(tr);
     });
+}
+
+onValue(alunosRef, snapshot => {
+    cache = snapshot.val() || {};
+    renderCache();
 });
+
+/* CONFIRMAR */
+window.confirmar = (id) => {
+    if (!confirm("Confirma que a avaliação foi realizada?")) return;
+
+    const d = cache[id];
+    const data = d.dataAvaliacao || hojeISO();
+
+    update(ref(db, `alunos/${id}`), {
+        dataAvaliacao: data,
+        dataReavaliacao: calcReavaliacao(data),
+        avaliacaoRealizada: true
+    });
+};
 
 /* EXCLUIR */
 window.excluir = (id) => {
@@ -237,6 +247,3 @@ window.adicionarAluno = () => {
 
 </body>
 </html>
-
-
-

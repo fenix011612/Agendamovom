@@ -69,6 +69,7 @@ button {
 
 <h1>Agenda de Avaliações</h1>
 
+<!-- AGENDA EM DIA -->
 <div class="container">
 <h2>📅 Agenda em dia</h2>
 <table>
@@ -89,6 +90,7 @@ button {
 <button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
+<!-- VENCIDAS -->
 <div class="container">
 <h2>⚠️ Reavaliações vencidas</h2>
 <table>
@@ -155,9 +157,14 @@ onValue(alunosRef, snapshot => {
         const dataReav = d.dataReavaliacao ? new Date(d.dataReavaliacao) : null;
         const diff = dataReav ? Math.ceil((dataReav - hoje) / 86400000) : null;
         const vencida = diff !== null && diff < 0;
+        const vencendo = diff !== null && diff > 0 && diff <= 7;
+        const hojeReav = diff === 0;
 
         if (!vencida) {
             const tr = document.createElement("tr");
+            if (vencendo) tr.classList.add("vencendo");
+            if (hojeReav) tr.classList.add("hoje");
+
             tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
@@ -202,23 +209,26 @@ onValue(alunosRef, snapshot => {
 
             tabelaAlunos.appendChild(tr);
         } else {
+            const novaData = hojeISO();
+
             vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
 <td>${br(d.dataAvaliacao)}</td>
-<td><input type="date" id="d${id}"></td>
+<td>${br(novaData)}</td>
 <td><input type="time" id="h${id}"></td>
-<td><button class="ok" onclick="reagendar('${id}')">OK</button></td>
+<td>
+<button class="ok" onclick="reagendar('${id}', '${novaData}')">OK</button>
+</td>
 </tr>`;
         }
     });
 });
 
-/* REAGENDAR */
-window.reagendar = (id) => {
-    const data = document.getElementById(`d${id}`).value;
+/* REAGENDAR AUTOMÁTICO */
+window.reagendar = (id, data) => {
     const hora = document.getElementById(`h${id}`).value;
-    if (!data || !hora) return alert("Preencha data e horário");
+    if (!hora) return alert("Preencha o horário");
 
     update(ref(db, `alunos/${id}`), {
         dataAvaliacao: data,
@@ -242,3 +252,4 @@ window.adicionarAluno = () => {
 
 </body>
 </html>
+

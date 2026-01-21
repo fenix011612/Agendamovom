@@ -69,7 +69,6 @@ button {
 
 <h1>Agenda de Avaliações</h1>
 
-<!-- ===== AGENDA EM DIA ===== -->
 <div class="container">
 <h2>📅 Agenda em dia</h2>
 <table>
@@ -90,7 +89,6 @@ button {
 <button onclick="adicionarAluno()">➕ Adicionar Aluno</button>
 </div>
 
-<!-- ===== VENCIDAS ===== -->
 <div class="container">
 <h2>⚠️ Reavaliações vencidas</h2>
 <table>
@@ -113,7 +111,7 @@ import {
   getDatabase, ref, push, set, onValue, update, remove
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-/* ===== FIREBASE ===== */
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
   authDomain: "agendamovom.firebaseapp.com",
@@ -130,48 +128,36 @@ const alunosRef = ref(db, "alunos");
 const tabelaAlunos = document.getElementById("tabelaAlunos");
 const vencidas = document.getElementById("vencidas");
 
-/* ===== FUNÇÕES ===== */
-function hojeISO() {
-    return new Date().toISOString().split("T")[0];
-}
+/* UTIL */
+const hojeISO = () => new Date().toISOString().split("T")[0];
 
-function calcReavaliacao(data) {
+const br = (data) => {
     if (!data) return "";
+    const [y, m, d] = data.split("-");
+    return `${d}/${m}/${y}`;
+};
+
+const calcReavaliacao = (data) => {
     const d = new Date(data + "T00:00");
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split("T")[0];
-}
+};
 
-/* ===== RENDER ===== */
-function renderAlunos(snapshot) {
+/* RENDER */
+onValue(alunosRef, snapshot => {
     tabelaAlunos.innerHTML = "";
     vencidas.innerHTML = "";
 
     const alunos = snapshot.val() || {};
     const hoje = new Date();
 
-    const lista = Object.entries(alunos)
-        .map(([id, d]) => ({ id, ...d }))
-        .sort((a, b) => {
-            const da = new Date(`${a.dataAvaliacao || "2100-01-01"} ${a.horario || "00:00"}`);
-            const db = new Date(`${b.dataAvaliacao || "2100-01-01"} ${b.horario || "00:00"}`);
-            if (da - db !== 0) return da - db;
-            return new Date(a.dataReavaliacao || "2100-01-01") - new Date(b.dataReavaliacao || "2100-01-01");
-        });
-
-    lista.forEach(d => {
+    Object.entries(alunos).forEach(([id, d]) => {
         const dataReav = d.dataReavaliacao ? new Date(d.dataReavaliacao) : null;
         const diff = dataReav ? Math.ceil((dataReav - hoje) / 86400000) : null;
-
         const vencida = diff !== null && diff < 0;
-        const vencendo = diff !== null && diff > 0 && diff <= 7;
-        const hojeReav = diff === 0;
 
         if (!vencida) {
             const tr = document.createElement("tr");
-            if (vencendo) tr.classList.add("vencendo");
-            if (hojeReav) tr.classList.add("hoje");
-
             tr.innerHTML = `
 <td><input value="${d.nome || ""}"></td>
 <td>
@@ -182,7 +168,7 @@ function renderAlunos(snapshot) {
 </td>
 <td><input type="date" value="${d.dataAvaliacao || ""}"></td>
 <td><input type="time" value="${d.horario || ""}"></td>
-<td>${d.dataReavaliacao || ""}</td>
+<td>${br(d.dataReavaliacao)}</td>
 <td>
 <select>
 <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
@@ -194,30 +180,23 @@ function renderAlunos(snapshot) {
 <td><button>🗑️</button></td>
 `;
 
-            const i = tr.querySelectorAll("input, select");
-
-            tr.addEventListener("change", () => {
-                update(ref(db, `alunos/${d.id}`), {
-                    nome: i[0].value,
-                    tipo: i[1].value,
-                    dataAvaliacao: i[2].value,
-                    horario: i[3].value,
-                    dataReavaliacao: calcReavaliacao(i[2].value),
-                    plano: i[4].value
-                });
-            });
+            const campos = tr.querySelectorAll("input, select");
 
             tr.querySelector(".confirmar").onclick = () => {
-                const hojeData = hojeISO();
-                update(ref(db, `alunos/${d.id}`), {
-                    dataAvaliacao: hojeData,
-                    dataReavaliacao: calcReavaliacao(hojeData)
+                const data = campos[2].value || hojeISO();
+                update(ref(db, `alunos/${id}`), {
+                    nome: campos[0].value,
+                    tipo: campos[1].value,
+                    dataAvaliacao: data,
+                    horario: campos[3].value,
+                    dataReavaliacao: calcReavaliacao(data),
+                    plano: campos[4].value
                 });
             };
 
             tr.querySelectorAll("button")[1].onclick = () => {
                 if (confirm("Excluir aluno?")) {
-                    remove(ref(db, `alunos/${d.id}`));
+                    remove(ref(db, `alunos/${id}`));
                 }
             };
 
@@ -226,51 +205,29 @@ function renderAlunos(snapshot) {
             vencidas.innerHTML += `
 <tr class="vencida">
 <td>${d.nome}</td>
-<td>${d.dataAvaliacao || ""}</td>
-<td><input type="date" id="d${d.id}"></td>
-<td><input type="time" id="h${d.id}"></td>
-<td><button class="ok" onclick="reagendar('${d.id}')">OK</button></td>
+<td>${br(d.dataAvaliacao)}</td>
+<td><input type="date" id="d${id}"></td>
+<td><input type="time" id="h${id}"></td>
+<td><button class="ok" onclick="reagendar('${id}')">OK</button></td>
 </tr>`;
         }
     });
-}
+});
 
-/* ===== REAGENDAR ===== */
+/* REAGENDAR */
 window.reagendar = (id) => {
-    const novaData = document.getElementById(`d${id}`).value;
-    const novoHorario = document.getElementById(`h${id}`).value;
-
-    if (!novaData || !novoHorario) {
-        alert("Preencha data e horário");
-        return;
-    }
+    const data = document.getElementById(`d${id}`).value;
+    const hora = document.getElementById(`h${id}`).value;
+    if (!data || !hora) return alert("Preencha data e horário");
 
     update(ref(db, `alunos/${id}`), {
-        dataAvaliacao: novaData,
-        horario: novoHorario,
-        dataReavaliacao: calcReavaliacao(novaData)
+        dataAvaliacao: data,
+        horario: hora,
+        dataReavaliacao: calcReavaliacao(data)
     });
 };
 
-/* ===== TEMPO REAL + ALERTA ===== */
-onValue(alunosRef, snapshot => {
-    renderAlunos(snapshot);
-
-    const alunos = snapshot.val() || {};
-    const hoje = new Date();
-
-    const alertas = Object.values(alunos).filter(a => {
-        if (!a.dataReavaliacao) return false;
-        const diff = Math.ceil((new Date(a.dataReavaliacao) - hoje) / 86400000);
-        return diff <= 0;
-    });
-
-    if (alertas.length > 0) {
-        alert(`⚠️ Atenção!\nVocê tem ${alertas.length} reavaliação(ões) vencida(s) ou vencendo hoje.`);
-    }
-});
-
-/* ===== ADICIONAR ===== */
+/* ADD */
 window.adicionarAluno = () => {
     set(push(alunosRef), {
         nome: "",

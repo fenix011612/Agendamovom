@@ -30,16 +30,34 @@ th,td{
     text-align:center;
 }
 th{ background:#d6c3ff; }
+
 input,select,button{ padding:5px; }
+
 button{
     border:none;
     border-radius:6px;
     cursor:pointer;
 }
-.confirmar{ background:#6a5acd; color:#fff; }
-.realizada{ background:#2ecc71; color:#fff; }
-.vencida{ background:#f8d7da; }
-.filtros button{ margin-right:5px; }
+
+.confirmar{
+    background:#6a5acd;
+    color:#fff;
+}
+.feito{
+    background:#2ecc71;
+    color:#fff;
+}
+.vencida{
+    background:#f8d7da;
+}
+
+.filtros{
+    margin-bottom:10px;
+}
+.filtros button{
+    margin-right:5px;
+}
+
 .alerta{
     background:#fff3cd;
     border:1px solid #ffeeba;
@@ -59,10 +77,11 @@ button{
 <ul id="listaVencidas"></ul>
 </div>
 
+<!-- 🔎 FILTRO FEITO x PENDENTE -->
 <div class="filtros">
 <button onclick="setFiltro('todos')">Todos</button>
-<button onclick="setFiltro('pendentes')">Pendentes</button>
-<button onclick="setFiltro('realizadas')">Realizadas</button>
+<button onclick="setFiltro('pendente')">Pendentes</button>
+<button onclick="setFiltro('feito')">Feitos</button>
 </div>
 
 <div class="container">
@@ -75,7 +94,7 @@ button{
 <th>Horário</th>
 <th>Reavaliação</th>
 <th>Plano</th>
-<th>✔️</th>
+<th>Status</th>
 <th>🗑️</th>
 </tr>
 </thead>
@@ -86,12 +105,12 @@ button{
 <button onclick="adicionar()">➕ Adicionar Aluno</button>
 </div>
 
-<!-- 🔥 FIREBASE (SEM MODULE) -->
+<!-- 🔥 FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
 <script>
-/* 🔥 CONFIG */
+/* 🔥 CONFIG FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
   authDomain: "agendamovom.firebaseapp.com",
@@ -111,6 +130,7 @@ const alerta = document.getElementById("alerta");
 const listaVencidas = document.getElementById("listaVencidas");
 
 let filtro = "todos";
+let cache = {};
 
 /* 🛠 FUNÇÕES */
 function hojeISO(){
@@ -139,11 +159,11 @@ function adicionar(){
         horario:"",
         dataReavaliacao: calcReavaliacao(hojeISO()),
         plano:"Mensal",
-        realizada:false
+        realizada:false   // 👈 pendente por padrão
     });
 }
 
-/* 💾 SALVAR CAMPO (CORREÇÃO DO BUG DO NOME) */
+/* 💾 SALVAR */
 function salvarCampo(id,campo,valor){
     const dados = {};
     dados[campo] = valor;
@@ -155,8 +175,8 @@ function salvarCampo(id,campo,valor){
     alunosRef.child(id).update(dados);
 }
 
-/* ✔️ CONFIRMAR */
-function confirmar(id,estado){
+/* ✔️ FEITO / PENDENTE */
+function alternarStatus(id,estado){
     alunosRef.child(id).update({
         realizada: !estado
     });
@@ -169,21 +189,19 @@ function excluir(id){
     }
 }
 
-/* 🎯 FILTRO */
+/* 🔎 FILTRO */
 function setFiltro(f){
     filtro = f;
-    renderCache();
+    render();
 }
-
-let cache = {};
 
 /* 🔄 LISTENER */
 alunosRef.on("value", snap=>{
     cache = snap.val() || {};
-    renderCache();
+    render();
 });
 
-function renderCache(){
+function render(){
     tabela.innerHTML="";
     listaVencidas.innerHTML="";
     alerta.style.display="none";
@@ -191,7 +209,8 @@ function renderCache(){
     const hoje = hojeISO();
 
     Object.entries(cache).forEach(([id,d])=>{
-        const vencida = d.dataReavaliacao < hoje && !d.realizada;
+        const pendente = !d.realizada;
+        const vencida = d.dataReavaliacao < hoje && pendente;
 
         if(vencida){
             alerta.style.display="block";
@@ -200,15 +219,17 @@ function renderCache(){
             listaVencidas.appendChild(li);
         }
 
-        if(filtro==="pendentes" && d.realizada) return;
-        if(filtro==="realizadas" && !d.realizada) return;
+        if(filtro==="pendente" && !pendente) return;
+        if(filtro==="feito" && pendente) return;
 
         const tr=document.createElement("tr");
         if(vencida) tr.classList.add("vencida");
 
         tr.innerHTML=`
-<td><input value="${d.nome || ""}"
-onchange="salvarCampo('${id}','nome',this.value)"></td>
+<td>
+<input value="${d.nome || ""}"
+onchange="salvarCampo('${id}','nome',this.value)">
+</td>
 
 <td>
 <select onchange="salvarCampo('${id}','tipo',this.value)">
@@ -238,12 +259,17 @@ onchange="salvarCampo('${id}','horario',this.value)">
 </td>
 
 <td>
-<button class="${d.realizada?'realizada':'confirmar'}"
-onclick="confirmar('${id}',${d.realizada})">✔️</button>
+<button class="${pendente?'confirmar':'feito'}"
+onclick="alternarStatus('${id}',${d.realizada})">
+${pendente ? 'Pendente' : 'Feito'}
+</button>
 </td>
 
-<td><button onclick="excluir('${id}')">🗑️</button></td>
+<td>
+<button onclick="excluir('${id}')">🗑️</button>
+</td>
 `;
+
         tabela.appendChild(tr);
     });
 }
@@ -251,3 +277,5 @@ onclick="confirmar('${id}',${d.realizada})">✔️</button>
 
 </body>
 </html>
+
+

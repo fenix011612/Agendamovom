@@ -11,14 +11,15 @@ body{
     background:#f3e9ff;
     padding:20px;
 }
-h1{
+h2{
     text-align:center;
-    color:#5a2d82;
+    color:#5b2d8b;
 }
 .container{
     background:#fff;
     padding:20px;
     border-radius:12px;
+    box-shadow:0 0 10px rgba(0,0,0,.1);
 }
 table{
     width:100%;
@@ -29,40 +30,60 @@ th,td{
     padding:6px;
     text-align:center;
 }
-th{ background:#d6c3ff; }
-input,select,button{ padding:5px; }
+th{
+    background:#d6c3ff;
+}
+input,select,button{
+    padding:5px;
+}
 button{
+    cursor:pointer;
     border:none;
     border-radius:6px;
-    cursor:pointer;
 }
-.confirmar{ background:#6a5acd; color:#fff; }
-.realizada{ background:#2ecc71; color:#fff; }
-.vencida{ background:#f8d7da; }
-.filtros button{ margin-right:5px; }
+.confirmar{
+    background:#6a5acd;
+    color:#fff;
+}
+.confirmada{
+    background:#2ecc71;
+    color:#fff;
+}
+.vencida{
+    background:#f8d7da;
+}
+.realizada{
+    background:#d4edda;
+}
 .alerta{
     background:#fff3cd;
     border:1px solid #ffeeba;
-    padding:10px;
+    padding:12px;
     border-radius:10px;
     margin-bottom:15px;
+}
+.filtros{
+    margin-bottom:10px;
+}
+.filtros button{
+    margin-right:5px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>📅 Agenda Movom</h1>
+<h2>📅 Agenda Movom</h2>
 
-<div class="alerta" id="alerta" style="display:none">
-<strong>⚠️ Reavaliações vencidas:</strong>
-<ul id="listaVencidas"></ul>
+<div class="alerta" id="alertaVencidas" style="display:none">
+    <strong>⚠️ Reavaliações vencidas:</strong>
+    <ul id="listaVencidas"></ul>
 </div>
 
 <div class="filtros">
-<button onclick="filtro='todos'">Todos</button>
-<button onclick="filtro='pendentes'">Pendentes</button>
-<button onclick="filtro='realizadas'">Realizadas</button>
+    <button onclick="filtroAtual='todos';render()">Todos</button>
+    <button onclick="filtroAtual='pendentes';render()">Pendentes</button>
+    <button onclick="filtroAtual='realizadas';render()">Realizadas</button>
 </div>
 
 <div class="container">
@@ -75,7 +96,7 @@ button{
 <th>Horário</th>
 <th>Reavaliação</th>
 <th>Plano</th>
-<th>✔️</th>
+<th>OK</th>
 <th>🗑️</th>
 </tr>
 </thead>
@@ -86,43 +107,13 @@ button{
 <button onclick="adicionar()">➕ Adicionar Aluno</button>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {
-  getDatabase, ref, push, set, onValue, update, remove
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-/* 🔥 FIREBASE */
-const firebaseConfig = {
-  apiKey: "AIzaSyDQvA6XiiwiyMrh0xjdy5s4QNjXwIgQoh4",
-  authDomain: "agendamovom.firebaseapp.com",
-  databaseURL: "https://agendamovom-default-rtdb.firebaseio.com",
-  projectId: "agendamovom",
-  storageBucket: "agendamovom.appspot.com",
-  messagingSenderId: "919577291328",
-  appId: "1:919577291328:web:65f5937da45903598ccda5"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const alunosRef = ref(db,"alunos");
-
+<script>
+let cache = JSON.parse(localStorage.getItem("agenda")) || {};
+let filtroAtual = "todos";
 const tabela = document.getElementById("tabela");
-const alerta = document.getElementById("alerta");
-const listaVencidas = document.getElementById("listaVencidas");
 
-let cache = {};
-let filtro = "todos";
-
-/* 🛠 FUNÇÕES */
-function hojeISO(){
-    return new Date().toISOString().split("T")[0];
-}
-
-function calcReavaliacao(data){
-    const d = new Date(data);
-    d.setMonth(d.getMonth()+3);
-    return d.toISOString().split("T")[0];
+function salvarLocal(){
+    localStorage.setItem("agenda", JSON.stringify(cache));
 }
 
 function br(data){
@@ -131,84 +122,98 @@ function br(data){
     return `${d}/${m}/${y}`;
 }
 
-/* ➕ ADICIONAR */
-window.adicionar = () => {
-    const novo = push(alunosRef);
-    set(novo,{
+function calcReavaliacao(data){
+    const dt = new Date(data);
+    dt.setMonth(dt.getMonth()+3);
+    return dt.toISOString().split("T")[0];
+}
+
+function hojeISO(){
+    return new Date().toISOString().split("T")[0];
+}
+
+function adicionar(){
+    const id = Date.now();
+    cache[id] = {
         nome:"",
         tipo:"Avaliação",
-        dataAvaliacao: hojeISO(),
+        dataAvaliacao:hojeISO(),
         horario:"",
-        dataReavaliacao: calcReavaliacao(hojeISO()),
+        dataReavaliacao:calcReavaliacao(hojeISO()),
         plano:"Mensal",
-        realizada:false
-    });
-};
+        avaliacaoRealizada:false
+    };
+    salvarLocal();
+    render();
+}
 
-/* ✔️ CONFIRMAR */
-window.confirmar = (id, atual) => {
-    update(ref(db,`alunos/${id}`),{
-        realizada: !atual
-    });
-};
-
-/* 🗑️ EXCLUIR */
-window.excluir = id => {
-    if(confirm("Excluir aluno?")){
-        remove(ref(db,`alunos/${id}`));
+function salvar(id,campo,valor){
+    cache[id][campo]=valor;
+    if(campo==="dataAvaliacao"){
+        cache[id].dataReavaliacao = calcReavaliacao(valor);
     }
-};
+    salvarLocal();
+    render();
+}
 
-/* 🔄 RENDER */
-onValue(alunosRef,snapshot=>{
-    cache = snapshot.val() || {};
+function confirmar(id){
+    cache[id].avaliacaoRealizada = !cache[id].avaliacaoRealizada;
+    salvarLocal();
+    render();
+}
+
+function excluir(id){
+    if(confirm("Excluir aluno?")){
+        delete cache[id];
+        salvarLocal();
+        render();
+    }
+}
+
+function render(){
     tabela.innerHTML="";
-    listaVencidas.innerHTML="";
-    alerta.style.display="none";
-
     const hoje = hojeISO();
+    const alertaBox = document.getElementById("alertaVencidas");
+    const lista = document.getElementById("listaVencidas");
+    lista.innerHTML="";
+    let temVencidas=false;
 
     Object.entries(cache).forEach(([id,d])=>{
-        const vencida = d.dataReavaliacao < hoje && !d.realizada;
+        const realizada = d.avaliacaoRealizada;
+        const vencida = d.dataReavaliacao < hoje && !realizada;
 
         if(vencida){
-            alerta.style.display="block";
+            temVencidas=true;
             const li=document.createElement("li");
-            li.textContent = `${d.nome || "Sem nome"} – ${br(d.dataReavaliacao)}`;
-            listaVencidas.appendChild(li);
+            li.textContent=`${d.nome || "Sem nome"} – ${br(d.dataReavaliacao)}`;
+            lista.appendChild(li);
         }
 
-        if(filtro==="pendentes" && d.realizada) return;
-        if(filtro==="realizadas" && !d.realizada) return;
+        if(filtroAtual==="pendentes" && realizada) return;
+        if(filtroAtual==="realizadas" && !realizada) return;
 
         const tr=document.createElement("tr");
         if(vencida) tr.classList.add("vencida");
+        if(realizada) tr.classList.add("realizada");
 
         tr.innerHTML=`
-<td><input value="${d.nome}" onchange="update(ref(db,'alunos/${id}'),{nome:this.value})"></td>
+<td><input value="${d.nome}" onchange="salvar('${id}','nome',this.value)"></td>
 
 <td>
-<select onchange="update(ref(db,'alunos/${id}'),{tipo:this.value})">
+<select onchange="salvar('${id}','tipo',this.value)">
 <option ${d.tipo==="Avaliação"?"selected":""}>Avaliação</option>
 <option ${d.tipo==="Aula"?"selected":""}>Aula</option>
 </select>
 </td>
 
-<td>
-<input type="date" value="${d.dataAvaliacao}"
-onchange="update(ref(db,'alunos/${id}'),{
-dataAvaliacao:this.value,
-dataReavaliacao:'${calcReavaliacao(d.dataAvaliacao)}'
-})">
-</td>
+<td><input type="date" value="${d.dataAvaliacao}" onchange="salvar('${id}','dataAvaliacao',this.value)"></td>
 
-<td><input type="time" value="${d.horario}"
-onchange="update(ref(db,'alunos/${id}'),{horario:this.value})"></td>
+<td><input type="time" value="${d.horario}" onchange="salvar('${id}','horario',this.value)"></td>
 
 <td>${br(d.dataReavaliacao)}</td>
 
 <td>
-<select onchange="update(ref(db,'alunos/${id}'),{plano:this.value})">
+<select onchange="salvar('${id}','plano',this.value)">
 <option ${d.plano==="Mensal"?"selected":""}>Mensal</option>
 <option ${d.plano==="Gympass"?"selected":""}>Gympass</option>
 <option ${d.plano==="Totalpass"?"selected":""}>Totalpass</option>
@@ -216,17 +221,22 @@ onchange="update(ref(db,'alunos/${id}'),{horario:this.value})"></td>
 </td>
 
 <td>
-<button class="${d.realizada?'realizada':'confirmar'}"
-onclick="confirmar('${id}',${d.realizada})">✔️</button>
+<button class="${realizada?"confirmada":"confirmar"}" onclick="confirmar('${id}')">
+${realizada?"✔️":"✔️"}
+</button>
 </td>
 
 <td><button onclick="excluir('${id}')">🗑️</button></td>
 `;
-
         tabela.appendChild(tr);
     });
-});
+
+    alertaBox.style.display = temVencidas ? "block" : "none";
+}
+
+render();
 </script>
 
 </body>
 </html>
+
